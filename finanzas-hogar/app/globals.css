@@ -323,3 +323,76 @@ body {
     .analysis-totals > div { grid-template-columns: 1fr auto; align-items: center; }
     .family-row { gap: 7px; }
   }
+
+.market-workspace { display: grid; gap: 14px; }
+.market-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.market-summary-card { display: grid; min-height: 105px; align-content: center; gap: 7px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.market-summary-card > span { color: #778078; font-size: 10px; }
+.market-summary-card > strong { color: #303a31; font: 600 20px Georgia, serif; }
+.market-summary-card > small { color: #929a92; font-size: 9px; }
+.market-summary-card.saving { border-color: #d9e8dc; background: #f5f9f3; }
+.market-summary-card.saving > strong { color: #397652; }
+.market-summary-card.increase { border-color: #f0ddd5; background: #fcf6f3; }
+.market-summary-card.increase > strong { color: #b6644c; }
+.purchase-entry-panel { padding-bottom: 16px; }
+.purchase-form { display: grid; gap: 17px; }
+.purchase-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.purchase-lines-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+.purchase-lines-heading strong { color: #465147; font-size: 11px; }
+.purchase-lines-heading span { color: #929a92; font-size: 9px; }
+.purchase-line-list { display: grid; gap: 9px; }
+.purchase-line { display: grid; grid-template-columns: minmax(130px, 1.5fr) minmax(76px, .65fr) minmax(100px, .9fr) minmax(125px, 1fr) 28px; align-items: end; gap: 9px; }
+.purchase-line label { display: grid; min-width: 0; gap: 6px; color: #69736a; font-size: 9px; }
+.purchase-line input, .purchase-line select { width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid #e3e8e1; border-radius: 5px; background: #fff; color: var(--foreground); font: inherit; font-size: 10px; }
+.purchase-line input:focus, .purchase-line select:focus { border-color: #8bab92; outline: 2px solid #e7f0e7; }
+.remove-line-button { width: 28px; height: 34px; border: 0; border-radius: 5px; background: #f7f4f1; color: #9a6756; font-size: 18px; cursor: pointer; }
+.remove-line-button:disabled { opacity: .4; cursor: default; }
+.purchase-form-footer { display: flex; align-items: center; gap: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
+.purchase-form-footer > .text-button { margin-right: auto; }
+.purchase-total { display: grid; gap: 4px; text-align: right; }
+.purchase-total span { color: #899188; font-size: 9px; }
+.purchase-total strong { color: #344238; font: 600 16px Georgia, serif; }
+.price-comparison-list { display: grid; }
+.price-comparison-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(145px, .8fr) minmax(105px, .6fr); align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid #edf0eb; }
+.price-comparison-row:last-child { border-bottom: 0; }
+.price-comparison-row > div:first-child strong, .price-comparison-row > div:first-child small { display: block; }
+.price-comparison-row > div:first-child strong { color: #3e493f; font-size: 11px; }
+.price-comparison-row > div:first-child small { margin-top: 5px; color: #929a92; font-size: 9px; }
+.price-comparison-current { display: grid; gap: 5px; }
+.price-comparison-current > strong { color: #3d483e; font-size: 11px; }
+.price-comparison-current > strong small { color: #899188; font-size: 9px; font-weight: 400; }
+.price-comparison-current > span { font-size: 9px; }
+.price-lower { color: #397652; }
+.price-higher { color: #b6644c; }
+.price-same, .price-first { color: #899188; }
+.price-comparison-previous { display: grid; gap: 5px; text-align: right; }
+.price-comparison-previous span { color: #929a92; font-size: 8px; }
+.price-comparison-previous strong { color: #69736a; font-size: 10px; font-weight: 550; }
+.shopping-list-panel { grid-column: 1 / -1; }
+
+@media (max-width: 780px) {
+  .market-summary-grid { gap: 8px; }
+  .market-summary-card { min-height: 98px; padding: 12px; }
+  .market-summary-card > strong { font-size: 17px; }
+  .purchase-line { grid-template-columns: minmax(0, 1.4fr) minmax(70px, .7fr) minmax(95px, 1fr) 28px; }
+  .purchase-line label:nth-child(4) { grid-column: 1 / 4; }
+  .purchase-line .remove-line-button { grid-column: 4; grid-row: 2; }
+  .price-comparison-row { grid-template-columns: minmax(0, 1fr) minmax(130px, .9fr); }
+  .price-comparison-previous { grid-column: 2; grid-row: 2; text-align: left; }
+}
+@media (max-width: 480px) {
+  .market-summary-grid { grid-template-columns: 1fr; }
+  .market-summary-card { min-height: 82px; }
+  .purchase-meta { grid-template-columns: 1fr; }
+  .purchase-lines-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .purchase-line { grid-template-columns: minmax(0, 1fr) minmax(75px, .7fr) 28px; }
+  .purchase-line label:nth-child(3) { grid-column: 1; }
+  .purchase-line label:nth-child(4) { grid-column: 2; }
+  .purchase-line .remove-line-button { grid-column: 3; grid-row: 2; }
+  .purchase-form-footer { flex-wrap: wrap; gap: 10px; }
+  .purchase-form-footer > .text-button { flex-basis: 100%; justify-content: flex-start; }
+  .purchase-form-footer > .primary-button { margin-left: auto; }
+  .price-comparison-row { grid-template-columns: 1fr auto; gap: 9px; }
+  .price-comparison-current { justify-items: end; text-align: right; }
+  .price-comparison-previous { grid-column: 1 / -1; grid-row: auto; display: flex; justify-content: space-between; text-align: left; }
+}

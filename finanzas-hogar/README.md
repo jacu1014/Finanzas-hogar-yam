@@ -53,13 +53,15 @@ Abre http://localhost:3000.
 ### Supabase
 
 1. Crea un proyecto en Supabase.
-2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql` y `supabase/migrations/202609290001_family_profiles.sql` desde el SQL Editor.
+2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql`, `supabase/migrations/202609290001_family_profiles.sql` y `supabase/migrations/202609290002_authenticated_table_grants.sql` desde el SQL Editor.
 3. En Project Settings → API copia la URL del proyecto y la clave `publishable` (o la clave `anon` heredada).
 4. Crea `.env.local` en la carpeta de la app con `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 5. Agrega esas mismas variables en Vercel para Production, Preview y Development, y vuelve a desplegar.
 6. En Supabase → Authentication → URL Configuration registra la URL local y el dominio de Vercel en Site URL / Redirect URLs.
 
 La aplicación permite crear cuenta o iniciar sesión con correo y contraseña. Si la confirmación por correo está activada, confirma el mensaje antes del primer inicio. Después puedes crear el hogar, registrar sus integrantes y definir un presupuesto; ingresos, gastos, deudas y mercado se agregan manualmente desde la interfaz. No hay datos financieros predeterminados.
+
+En Mercado puedes guardar cada compra con tienda, fecha, cantidad y precio unitario por producto. El módulo compara el último precio registrado con la compra anterior de la misma unidad y contrasta el gasto total del mes con el anterior. Usa las tablas `market_purchases` y `market_purchase_items` existentes.
 
 No publiques claves `service_role` ni secretos en variables `NEXT_PUBLIC_*`.
 

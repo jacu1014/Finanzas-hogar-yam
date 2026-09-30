@@ -53,11 +53,15 @@ Abre http://localhost:3000.
 ### Supabase
 
 1. Crea un proyecto en Supabase.
-2. Ejecuta `supabase/migrations/202609260001_initial_schema.sql` desde el SQL Editor.
-3. Copia `.env.example` como `.env.local` y agrega la URL del proyecto y su clave publicable.
-4. No publiques claves `service_role` ni secretos en variables `NEXT_PUBLIC_*`.
+2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql` y `supabase/migrations/202609290001_family_profiles.sql` desde el SQL Editor.
+3. En Project Settings → API copia la URL del proyecto y la clave `publishable` (o la clave `anon` heredada).
+4. Crea `.env.local` en la carpeta de la app con `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+5. Agrega esas mismas variables en Vercel para Production, Preview y Development, y vuelve a desplegar.
+6. En Supabase → Authentication → URL Configuration registra la URL local y el dominio de Vercel en Site URL / Redirect URLs.
 
-La migración crea hogares, miembros, movimientos, deudas, compras históricas y listas de mercado compartidas, con políticas RLS para separar los datos por hogar. La siguiente etapa conectará la autenticación y la interfaz a estas tablas.
+La aplicación permite crear cuenta o iniciar sesión con correo y contraseña. Si la confirmación por correo está activada, confirma el mensaje antes del primer inicio. Después puedes crear el hogar, registrar sus integrantes y definir un presupuesto; ingresos, gastos, deudas y mercado se agregan manualmente desde la interfaz. No hay datos financieros predeterminados.
+
+No publiques claves `service_role` ni secretos en variables `NEXT_PUBLIC_*`.
 
 ### GitHub y Vercel
 

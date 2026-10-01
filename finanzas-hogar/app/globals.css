@@ -375,6 +375,44 @@ body {
   .home-budget-category span { color: #7d877e; font-size: 9px; text-align: right; }
   .home-budget-category i { padding: 0 3px; color: #bbc1ba; font-style: normal; }
   .home-budget-category .budget-bars { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .debt-workspace { display: grid; gap: 14px; }
+  .debt-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .debt-overview-card { display: grid; min-height: 102px; align-content: center; gap: 7px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+  .debt-overview-card > span { color: #778078; font-size: 10px; }
+  .debt-overview-card > strong { color: #303a31; font: 600 20px Georgia, serif; }
+  .debt-overview-card > small { color: #929a92; font-size: 9px; }
+  .debt-create-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 11px; }
+  .debt-create-form label, .debt-payment-form label { display: grid; min-width: 0; gap: 6px; color: #69736a; font-size: 9px; }
+  .debt-create-form input, .debt-create-form select, .debt-payment-form input { width: 100%; min-width: 0; min-height: 36px; padding: 0 9px; border: 1px solid #e3e8e1; border-radius: 5px; background: #fff; color: var(--foreground); font: inherit; font-size: 10px; }
+  .debt-create-submit { grid-column: 4; min-height: 36px; }
+  .debt-card-list { display: grid; gap: 13px; }
+  .debt-card { padding: 18px; }
+  .debt-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+  .debt-card-heading h2 { margin: 5px 0 0; color: #303a31; font: 600 18px Georgia, serif; }
+  .debt-status { padding: 5px 8px; border-radius: 12px; font-size: 9px; }
+  .debt-status.active { background: #edf5ec; color: #39714f; }
+  .debt-status.overdue { background: #fbefeb; color: #a65442; }
+  .debt-status.paid { background: #f1f2ed; color: #778078; }
+  .debt-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 13px 0; border-top: 1px solid #edf0eb; border-bottom: 1px solid #edf0eb; }
+  .debt-metrics > div { display: grid; gap: 6px; }
+  .debt-metrics span { color: #899188; font-size: 9px; }
+  .debt-metrics strong { color: #424d43; font-size: 11px; font-weight: 600; }
+  .debt-card .debt-progress { margin: 15px 0; }
+  .debt-card .debt-progress > div:first-child { font-size: 9px; }
+  .debt-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid #edf0eb; color: #7d877e; font-size: 9px; }
+  .debt-card-footer > span strong { margin-left: 4px; color: #3e493f; font-size: 11px; }
+  .debt-card-footer > span small { color: #929a92; }
+  .debt-payment-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; margin-top: 14px; padding: 14px; border-radius: 6px; background: #f7f8f5; }
+  .debt-payment-form label small { color: #929a92; font-size: 8px; font-weight: 400; }
+  .debt-payment-form label.installment-check { display: flex; min-height: 36px; flex-direction: row; align-items: center; gap: 8px; color: #566258; }
+  .installment-check input { width: 15px; min-height: 15px; accent-color: var(--green); }
+  .debt-payment-form .payment-note-label { grid-column: span 2; }
+  .debt-payment-form > .primary-button { min-height: 36px; }
+  .debt-history { margin-top: 12px; border-top: 1px solid #edf0eb; }
+  .debt-history summary { padding: 11px 0 4px; color: var(--green); font-size: 10px; font-weight: 650; cursor: pointer; }
+  .debt-payment-list { display: grid; }
+  .debt-payment-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; padding: 9px 0; border-top: 1px solid #f0f1ee; color: #7d877e; font-size: 9px; }
+  .debt-payment-row > strong { color: #3e493f; font-size: 10px; text-align: right; }
 
   @media (max-width: 780px) {
     .family-layout { grid-template-columns: 1fr; }
@@ -384,6 +422,12 @@ body {
     .budget-overview-grid { gap: 8px; }
     .planned-payment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .planned-form-actions { grid-column: 1 / -1; }
+    .debt-overview-grid { gap: 8px; }
+    .debt-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .debt-create-submit { grid-column: 2; }
+    .debt-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .debt-payment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .debt-payment-form .payment-note-label { grid-column: 1 / -1; }
   }
   @media (max-width: 480px) {
     .auth-card { padding: 25px 20px; }
@@ -405,6 +449,14 @@ body {
     .planned-payment-actions { grid-column: 2 / -1; justify-content: flex-end; }
     .budget-category-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
     .budget-category-heading span { text-align: left; }
+    .debt-overview-grid { grid-template-columns: 1fr; }
+    .debt-overview-card { min-height: 80px; }
+    .debt-create-form, .debt-payment-form { grid-template-columns: 1fr; }
+    .debt-create-submit, .debt-payment-form .payment-note-label { grid-column: auto; }
+    .debt-card-footer { align-items: flex-start; flex-direction: column; }
+    .debt-payment-row { grid-template-columns: 1fr auto; }
+    .debt-payment-row span:nth-child(2) { grid-column: 1; }
+    .debt-payment-row > strong { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
   }
 
 .market-workspace { display: grid; gap: 14px; }

@@ -16,7 +16,22 @@ type Movement = {
   household_people: { name: string } | { name: string }[] | null;
 };
 
-type Debt = { id: string; name: string; creditor: string; original_amount: number; balance: number; due_date: string | null };
+type DebtPayment = { id: string; paid_on: string; amount: number; principal_amount: number; interest_amount: number; counts_as_installment: boolean; notes: string };
+type Debt = {
+  id: string;
+  name: string;
+  creditor: string;
+  original_amount: number;
+  opening_balance: number;
+  balance: number;
+  interest_rate: number | null;
+  total_installments: number | null;
+  installment_amount: number | null;
+  payment_frequency: "weekly" | "biweekly" | "monthly";
+  due_date: string | null;
+  next_due_date: string | null;
+  household_debt_payments: DebtPayment[];
+};
 type PlannedPayment = { id: string; name: string; category: string; planned_amount: number; due_day: number | null };
 type MarketItem = { id: string; name: string; quantity: string; is_checked: boolean };
 type PurchaseLine = { id: string; name: string; quantity: number; unit: string; unit_price: number; line_total: number };
@@ -81,6 +96,7 @@ export default function FinanceApp() {
   const [showMovementForm, setShowMovementForm] = useState(false);
   const [movementKind, setMovementKind] = useState<"expense" | "income">("expense");
   const [showDebtForm, setShowDebtForm] = useState(false);
+  const [payingDebtId, setPayingDebtId] = useState<string | null>(null);
   const [newMarketItem, setNewMarketItem] = useState("");
   const [budgetDraft, setBudgetDraft] = useState({ name: "", category: "Hogar", plannedAmount: "", dueDay: "" });
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
@@ -131,7 +147,7 @@ export default function FinanceApp() {
     const [peopleResult, movementsResult, debtsResult, listsResult, purchasesResult, planResult] = await Promise.all([
       supabase.from("household_people").select("id, name, relationship, user_id").eq("household_id", householdId).order("created_at"),
       supabase.from("transactions").select("id, description, category, amount, kind, occurred_on, person_id, household_people(name)").eq("household_id", householdId).order("occurred_on", { ascending: false }),
-      supabase.from("debts").select("id, name, creditor, original_amount, balance, due_date").eq("household_id", householdId).order("created_at", { ascending: false }),
+      supabase.from("debts").select("id, name, creditor, original_amount, opening_balance, balance, interest_rate, total_installments, installment_amount, payment_frequency, due_date, next_due_date, household_debt_payments(id, paid_on, amount, principal_amount, interest_amount, counts_as_installment, notes)").eq("household_id", householdId).order("created_at", { ascending: false }),
       supabase.from("shopping_lists").select("id").eq("household_id", householdId).is("archived_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("market_purchases").select("id, store, purchased_on, created_at, total_amount, market_purchase_items(id, name, quantity, unit, unit_price, line_total)").eq("household_id", householdId).order("purchased_on", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("household_budget_items").select("id, name, category, planned_amount, due_day").eq("household_id", householdId).order("due_day", { ascending: true, nullsFirst: false }).order("created_at"),
@@ -214,6 +230,7 @@ export default function FinanceApp() {
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "household_budget_items", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "debts", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "household_debt_payments" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "household_people", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "market_purchases", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "market_purchase_items" }, refresh)
@@ -338,7 +355,15 @@ export default function FinanceApp() {
     event.preventDefault();
     if (!supabase || !hasUser || !householdState.id) return;
     const form = new FormData(event.currentTarget);
-    const amount = Number(form.get("balance"));
+    const amount = Number(form.get("original_amount"));
+    if (!amount || amount <= 0) {
+      setErrorMessage("Ingresa un monto original mayor que cero.");
+      return;
+    }
+    const installments = Number(form.get("total_installments")) || null;
+    const installmentAmount = Number(form.get("installment_amount")) || null;
+    const interestRateValue = String(form.get("interest_rate") ?? "").trim();
+    const dueDate = String(form.get("next_due_date") || "") || null;
     setBusy(true);
     const result = await supabase.from("debts").insert({
       household_id: householdState.id,
@@ -346,13 +371,47 @@ export default function FinanceApp() {
       name: String(form.get("name")).trim(),
       creditor: String(form.get("creditor")).trim(),
       original_amount: amount,
+      opening_balance: amount,
       balance: amount,
-      due_date: String(form.get("due_date") || "") || null,
+      interest_rate: interestRateValue ? Number(interestRateValue) : null,
+      total_installments: installments,
+      installment_amount: installmentAmount,
+      payment_frequency: String(form.get("payment_frequency")),
+      due_date: dueDate,
+      next_due_date: dueDate,
     });
     if (result.error) setErrorMessage(result.error.message);
     else {
       setShowDebtForm(false);
       await loadWorkspace(user);
+    }
+    setBusy(false);
+  }
+
+  async function recordDebtPayment(event: FormEvent<HTMLFormElement>, debt: Debt) {
+    event.preventDefault();
+    if (!supabase || !hasUser) return;
+    const form = new FormData(event.currentTarget);
+    const amount = Number(form.get("amount"));
+    const interest = Number(form.get("interest_amount")) || 0;
+    if (!amount || amount <= 0 || interest < 0 || interest > amount) {
+      setErrorMessage("Revisa el valor pagado y que el interés no supere el pago total.");
+      return;
+    }
+    setBusy(true);
+    setErrorMessage("");
+    const { error } = await supabase.rpc("record_household_debt_payment", {
+      target_debt_id: debt.id,
+      payment_date: String(form.get("paid_on")),
+      payment_amount: amount,
+      interest_paid: interest,
+      is_installment: form.get("counts_as_installment") === "on",
+      payment_notes: String(form.get("notes") || "").trim(),
+    });
+    if (error) setErrorMessage(error.message);
+    else {
+      setPayingDebtId(null);
+      await loadWorkspace(user, householdState.id, true);
     }
     setBusy(false);
   }
@@ -678,10 +737,53 @@ export default function FinanceApp() {
     })}</div> : <EmptyState title="Agrega pagos al plan mensual" detail="Al definir los pagos previstos, este resumen comparará cada categoría con sus movimientos reales." />}</section>;
   }
 
+  function renderDebts() {
+    const today = new Date().toISOString().slice(0, 10);
+    return <div className="debt-workspace">
+      <section className="debt-overview-grid">
+        <article className="debt-overview-card"><span>Saldo pendiente</span><strong>{money(debtBalance, householdState.currency)}</strong><small>{debts.filter((debt) => Number(debt.balance) > 0).length} deudas activas</small></article>
+        <article className="debt-overview-card"><span>Pagos registrados</span><strong>{money(debts.reduce((sum, debt) => sum + debt.household_debt_payments.reduce((paid, payment) => paid + Number(payment.amount), 0), 0), householdState.currency)}</strong><small>{debts.reduce((sum, debt) => sum + debt.household_debt_payments.length, 0)} abonos en el historial</small></article>
+        <article className="debt-overview-card"><span>Próximos vencimientos</span><strong>{debts.filter((debt) => debt.balance > 0 && debt.next_due_date && debt.next_due_date >= today).length}</strong><small>Cuotas pendientes de pago</small></article>
+      </section>
+
+      <section className="content-panel debt-create-panel">
+        <div className="panel-heading"><div><span className="eyebrow">OBLIGACIONES DEL HOGAR</span><h2>Registrar una deuda</h2></div><button className="quiet-button" type="button" onClick={() => setShowDebtForm((value) => !value)}>{showDebtForm ? "Cerrar" : "＋ Nueva deuda"}</button></div>
+        {showDebtForm && <form className="debt-create-form" onSubmit={addDebt}>
+          <label>Nombre de la deuda<input name="name" required placeholder="Ej. Crédito de vehículo" /></label>
+          <label>Acreedor<input name="creditor" placeholder="Banco o entidad" /></label>
+          <label>Monto original<input name="original_amount" type="number" min="1" step="1" required placeholder="COP" /></label>
+          <label>Tasa anual (%)<input name="interest_rate" type="number" min="0" step="0.01" placeholder="0" /></label>
+          <label>Número de cuotas<input name="total_installments" type="number" min="1" step="1" placeholder="Opcional" /></label>
+          <label>Valor por cuota<input name="installment_amount" type="number" min="1" step="1" placeholder="Opcional" /></label>
+          <label>Frecuencia<select name="payment_frequency"><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select></label>
+          <label>Primer vencimiento<input name="next_due_date" type="date" /></label>
+          <button className="primary-button debt-create-submit" disabled={busy}>{busy ? "Guardando…" : "Guardar deuda"}</button>
+        </form>}
+      </section>
+
+      <section className="debt-card-list">{debts.length ? debts.map((debt) => {
+        const payments = [...debt.household_debt_payments].sort((left, right) => right.paid_on.localeCompare(left.paid_on));
+        const installmentsPaid = payments.filter((payment) => payment.counts_as_installment).length;
+        const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+        const principalPaid = Math.max(Number(debt.original_amount) - Number(debt.opening_balance), 0) + payments.reduce((sum, payment) => sum + Number(payment.principal_amount), 0);
+        const principalProgress = Number(debt.original_amount) > 0 ? Math.min(principalPaid / Number(debt.original_amount) * 100, 100) : 0;
+        const overdue = debt.balance > 0 && debt.next_due_date !== null && debt.next_due_date < today;
+        return <article className="content-panel debt-card" key={debt.id}>
+          <div className="debt-card-heading"><div><span className="eyebrow">{debt.creditor || "ACREEDOR NO INDICADO"}</span><h2>{debt.name}</h2></div><span className={`debt-status ${debt.balance <= 0 ? "paid" : overdue ? "overdue" : "active"}`}>{debt.balance <= 0 ? "Pagada" : overdue ? "Vencida" : "Activa"}</span></div>
+          <div className="debt-metrics"><div><span>Saldo pendiente</span><strong>{money(Number(debt.balance), householdState.currency)}</strong></div><div><span>Monto original</span><strong>{money(Number(debt.original_amount), householdState.currency)}</strong></div><div><span>Tasa anual</span><strong>{debt.interest_rate === null ? "No indicada" : `${Number(debt.interest_rate).toFixed(2)}%`}</strong></div><div><span>Próximo vencimiento</span><strong>{debt.next_due_date ? shortDate(debt.next_due_date) : "No indicado"}</strong></div></div>
+          <div className="debt-progress"><div><span>Capital pagado · {principalProgress.toFixed(1)}%</span><strong>{debt.total_installments ? `${installmentsPaid} de ${debt.total_installments} cuotas` : `${installmentsPaid} cuotas registradas`}</strong></div><div className="progress-track"><i style={{ width: `${principalProgress}%` }} /></div></div>
+          <div className="debt-card-footer"><span>Pagado en total <strong>{money(totalPaid, householdState.currency)}</strong>{debt.installment_amount ? <small> · Cuota esperada {money(Number(debt.installment_amount), householdState.currency)} {debt.payment_frequency === "monthly" ? "mensual" : debt.payment_frequency === "biweekly" ? "quincenal" : "semanal"}</small> : null}</span><button className="primary-button" type="button" disabled={Number(debt.balance) <= 0} onClick={() => setPayingDebtId((current) => current === debt.id ? null : debt.id)}>{payingDebtId === debt.id ? "Cerrar" : "＋ Registrar pago"}</button></div>
+          {payingDebtId === debt.id && <form className="debt-payment-form" onSubmit={(event) => void recordDebtPayment(event, debt)}><label>Fecha del pago<input name="paid_on" type="date" defaultValue={today} required /></label><label>Total pagado<input name="amount" type="number" min="1" step="1" defaultValue={debt.installment_amount ?? ""} required placeholder="COP" /></label><label>Interés incluido<input name="interest_amount" type="number" min="0" step="1" defaultValue="0" /><small>Consulta el recibo para separar interés y capital.</small></label><label className="installment-check"><input name="counts_as_installment" type="checkbox" defaultChecked /><span>Cuenta como cuota pagada</span></label><label className="payment-note-label">Nota<input name="notes" placeholder="Opcional" /></label><button className="primary-button" type="submit" disabled={busy}>{busy ? "Guardando…" : "Guardar pago"}</button></form>}
+          {payments.length > 0 && <details className="debt-history"><summary>Historial de pagos ({payments.length})</summary><div className="debt-payment-list">{payments.map((payment) => <div className="debt-payment-row" key={payment.id}><span>{shortDate(payment.paid_on)}{payment.counts_as_installment ? " · Cuota" : " · Abono"}{payment.notes ? ` · ${payment.notes}` : ""}</span><span>Capital {money(Number(payment.principal_amount), householdState.currency)}{Number(payment.interest_amount) > 0 ? ` · Interés ${money(Number(payment.interest_amount), householdState.currency)}` : ""}</span><strong>{money(Number(payment.amount), householdState.currency)}</strong></div>)}</div></details>}
+        </article>;
+      }) : <section className="content-panel"><EmptyState title="No hay deudas registradas" detail="Agrega el monto, tasa, número de cuotas y fecha de vencimiento para empezar el seguimiento." /></section>}</section>
+    </div>;
+  }
+
   function renderModule() {
     if (section === "movimientos") return <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">REGISTRO DEL HOGAR</span><h2>Movimientos</h2></div><label className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar movimiento" /></label></div>{renderTransactions(filteredMovements)}</section>;
     if (section === "presupuesto") return renderBudget();
-    if (section === "deudas") return <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">COMPROMISOS DEL HOGAR</span><h2>Deudas</h2></div><button className="quiet-button" onClick={() => setShowDebtForm((value) => !value)}>＋ Registrar deuda</button></div>{showDebtForm && <form className="inline-form debt-form" onSubmit={addDebt}><label>Nombre<input name="name" required placeholder="Ej. Crédito de vivienda" /></label><label>Acreedor<input name="creditor" placeholder="Banco o persona" /></label><label>Saldo actual en COP<input name="balance" type="number" min="1" required placeholder="0" /></label><label>Próximo pago<input name="due_date" type="date" /></label><button className="primary-button" disabled={busy}>Guardar deuda</button></form>}{debts.length ? <div className="debt-list">{debts.map((debt) => <article className="debt-row" key={debt.id}><div className="debt-title"><div><strong>{debt.name}</strong><small>{debt.creditor || "Acreedor no especificado"}</small></div><span>{debt.due_date ? `Próximo pago · ${shortDate(debt.due_date)}` : "Sin fecha de pago"}</span></div><div className="debt-progress"><div><span>Saldo pendiente</span><strong>{money(Number(debt.balance), householdState.currency)}</strong></div><div className="progress-track"><i style={{ width: `${Math.min((1 - Number(debt.balance) / Number(debt.original_amount)) * 100, 100)}%` }} /></div></div></article>)}</div> : !showDebtForm && <EmptyState title="No hay deudas registradas" detail="Si tu familia tiene compromisos pendientes, puedes agregarlos aquí." />}<div className="debt-total"><span>Saldo total pendiente</span><strong>{money(debtBalance, householdState.currency)}</strong></div></section>;
+    if (section === "deudas") return renderDebts();
     if (section === "mercado") return renderMarket();
     if (section === "analisis") return <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">LECTURA DE TUS DATOS</span><h2>Resumen financiero</h2></div></div>{movements.length ? <><div className="analysis-totals"><div><span>Ingresos registrados</span><strong>{money(totalIncome, householdState.currency)}</strong></div><div><span>Gastos registrados</span><strong>{money(totalExpenses, householdState.currency)}</strong></div><div><span>Balance</span><strong>{money(totalIncome - totalExpenses, householdState.currency)}</strong></div></div><h3 className="subheading">Gastos por categoría</h3>{Array.from(expenses.reduce((groups, movement) => groups.set(movement.category, (groups.get(movement.category) ?? 0) + Number(movement.amount)), new Map<string, number>())).map(([category, amount]) => <div className="category-stat" key={category}><div><span>{category}</span><strong>{money(amount, householdState.currency)}</strong></div><div className="progress-track"><i style={{ width: `${totalExpenses ? (amount / totalExpenses) * 100 : 0}%` }} /></div></div>)}</> : <EmptyState title="El análisis aparecerá aquí" detail="Primero registra ingresos y gastos. Las gráficas se calcularán solo con información de tu hogar." />}</section>;
     if (section === "familia") return <div className="family-layout">

@@ -53,7 +53,7 @@ Abre http://localhost:3000.
 ### Supabase
 
 1. Crea un proyecto en Supabase.
-2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql`, `supabase/migrations/202609290001_family_profiles.sql`, `supabase/migrations/202609290002_authenticated_table_grants.sql`, `supabase/migrations/202609300001_household_invites_realtime.sql` y `supabase/migrations/202609300002_monthly_budget_plan.sql` desde el SQL Editor.
+2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql`, `supabase/migrations/202609290001_family_profiles.sql`, `supabase/migrations/202609290002_authenticated_table_grants.sql`, `supabase/migrations/202609300001_household_invites_realtime.sql`, `supabase/migrations/202609300002_monthly_budget_plan.sql` y `supabase/migrations/202609300003_debt_tracking.sql` desde el SQL Editor.
 3. En Project Settings → API copia la URL del proyecto y la clave `publishable` (o la clave `anon` heredada).
 4. Crea `.env.local` en la carpeta de la app con `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 5. Agrega esas mismas variables en Vercel para Production, Preview y Development, y vuelve a desplegar.
@@ -70,6 +70,10 @@ En Mercado puedes guardar cada compra con tienda, fecha, cantidad y precio unita
 La sección Presupuesto guarda los pagos previstos por concepto y categoría. La suma de sus partidas actualiza `households.monthly_budget` automáticamente; allí mismo se compara lo planificado con los gastos reales registrados durante el mes y se muestran las diferencias por categoría.
 
 Los movimientos de gastos utilizan el mismo catálogo de categorías del presupuesto para que las comparaciones coincidan. `Otros` permite registrar gastos no planificados; aparecen como gasto real fuera del plan y no aumentan el presupuesto previsto.
+
+El módulo Deudas conserva monto original, saldo inicial de seguimiento, tasa anual, número y valor esperado de cuotas, frecuencia y próximo vencimiento. Cada pago registra fecha, total e interés; el resto se aplica a capital, se recalcula el saldo pendiente y se crea automáticamente un movimiento de gasto en la categoría Deudas. Las cuotas contadas como pagadas se muestran junto al historial. Para las deudas anteriores, los pagos previos no se inventan: el saldo actual queda como punto de partida y desde ese momento comienza el historial detallado.
+
+Al registrar un abono, indica el interés que aparece en el comprobante; la aplicación calcula el capital como el resto del pago. La tasa anual se conserva para consulta y seguimiento, no reemplaza la liquidación de la entidad financiera.
 
 No publiques claves `service_role` ni secretos en variables `NEXT_PUBLIC_*`.
 

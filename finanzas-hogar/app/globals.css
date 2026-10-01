@@ -322,12 +322,68 @@ body {
   .analysis-totals span { color: #7b857b; font-size: 9px; }
   .analysis-totals strong { font: 600 15px Georgia, serif; }
   .subheading { margin: 23px 0 4px; color: #424d43; font: 600 15px Georgia, serif; }
+  .budget-workspace { display: grid; gap: 14px; }
+  .budget-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .budget-overview-card { display: grid; min-height: 108px; align-content: center; gap: 7px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+  .budget-overview-card > span { color: #778078; font-size: 10px; }
+  .budget-overview-card > strong { color: #303a31; font: 600 21px Georgia, serif; }
+  .budget-overview-card > small { color: #929a92; font-size: 9px; }
+  .budget-overview-card.planned { border-color: #d8e5d6; background: #f6f9f3; }
+  .budget-overview-card.executed { border-color: #e7e8df; background: #fbfaf5; }
+  .budget-overview-card.over-budget { border-color: #f0ddd5; background: #fcf5f1; }
+  .budget-overview-card.over-budget > strong { color: #b45f49; }
+  .budget-overview-card.under-budget > strong { color: #397652; }
+  .budget-plan-panel .panel-heading, .budget-comparison-panel .panel-heading { margin-bottom: 15px; }
+  .planned-payment-form { grid-template-columns: minmax(150px, 1.5fr) minmax(125px, 1fr) minmax(120px, .9fr) minmax(90px, .6fr) auto; align-items: end; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .planned-payment-form label { display: grid; min-width: 0; gap: 6px; color: #69736a; font-size: 9px; }
+  .planned-payment-form input, .planned-payment-form select { width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid #e3e8e1; border-radius: 5px; background: #fff; color: var(--foreground); font: inherit; font-size: 10px; }
+  .planned-form-actions { display: flex; gap: 6px; }
+  .planned-form-actions .primary-button, .planned-form-actions .quiet-button { min-height: 36px; white-space: nowrap; }
+  .planned-payment-list { display: grid; }
+  .planned-payment-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto; align-items: center; gap: 11px; min-height: 61px; padding: 9px 0; border-bottom: 1px solid #edf0eb; }
+  .planned-payment-row:last-child { border-bottom: 0; }
+  .planned-payment-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 7px; background: #edf4ec; color: var(--green); font: 600 14px Georgia, serif; }
+  .planned-payment-name strong, .planned-payment-name small { display: block; }
+  .planned-payment-name strong { color: #3e493f; font-size: 10px; }
+  .planned-payment-name small { margin-top: 4px; color: #929a92; font-size: 9px; }
+  .planned-payment-amount { color: #404a41; font-size: 11px; white-space: nowrap; }
+  .planned-payment-actions { display: flex; align-items: center; gap: 9px; }
+  .planned-payment-actions .text-button { font-size: 9px; }
+  .budget-plan-total { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); color: #69736a; font-size: 10px; }
+  .budget-plan-total strong { color: var(--green-dark); font: 600 18px Georgia, serif; }
+  .budget-comparison-list { display: grid; }
+  .budget-category-row { display: grid; gap: 8px; padding: 14px 0; border-bottom: 1px solid #edf0eb; }
+  .budget-category-row:last-child { border-bottom: 0; }
+  .budget-category-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .budget-category-heading strong { color: #3e493f; font-size: 10px; }
+  .budget-category-heading span { color: #7d877e; font-size: 9px; text-align: right; }
+  .budget-category-heading i { padding: 0 3px; color: #bbc1ba; font-style: normal; }
+  .budget-bars { display: grid; gap: 4px; }
+  .planned-bar, .actual-bar { height: 6px; overflow: hidden; border-radius: 5px; background: #edf0eb; }
+  .planned-bar i, .actual-bar i { display: block; height: 100%; border-radius: inherit; background: #78a080; }
+  .actual-bar i { background: #d6a176; }
+  .actual-bar.over i { background: #c97860; }
+  .budget-category-row > small { color: #718174; font-size: 9px; }
+  .budget-category-row > small.category-over { color: #b45f49; }
+  .budget-category-row > small.category-ok { color: #527458; }
+  .home-budget-snapshot { grid-column: 1 / -1; }
+  .home-budget-snapshot .panel-heading { margin-bottom: 12px; }
+  .home-budget-category-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+  .home-budget-category { display: grid; gap: 7px; padding: 12px 0; border-bottom: 1px solid #edf0eb; }
+  .home-budget-category > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .home-budget-category strong { color: #3e493f; font-size: 10px; }
+  .home-budget-category span { color: #7d877e; font-size: 9px; text-align: right; }
+  .home-budget-category i { padding: 0 3px; color: #bbc1ba; font-style: normal; }
+  .home-budget-category .budget-bars { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   @media (max-width: 780px) {
     .family-layout { grid-template-columns: 1fr; }
     .inline-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .currency-label { display: none; }
     .household-select { max-width: 130px; }
+    .budget-overview-grid { gap: 8px; }
+    .planned-payment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .planned-form-actions { grid-column: 1 / -1; }
   }
   @media (max-width: 480px) {
     .auth-card { padding: 25px 20px; }
@@ -340,6 +396,15 @@ body {
     .family-row { gap: 7px; }
     .household-select { max-width: 112px; min-height: 31px; padding: 0 5px; font-size: 9px; }
     .invite-code-row { align-items: flex-start; flex-direction: column; }
+    .budget-overview-grid { grid-template-columns: 1fr; }
+    .home-budget-category-list { grid-template-columns: 1fr; }
+    .budget-overview-card { min-height: 82px; }
+    .planned-payment-form { grid-template-columns: 1fr; }
+    .planned-form-actions { grid-column: auto; }
+    .planned-payment-row { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; }
+    .planned-payment-actions { grid-column: 2 / -1; justify-content: flex-end; }
+    .budget-category-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+    .budget-category-heading span { text-align: left; }
   }
 
 .market-workspace { display: grid; gap: 14px; }

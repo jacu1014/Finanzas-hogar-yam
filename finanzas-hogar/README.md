@@ -53,7 +53,7 @@ Abre http://localhost:3000.
 ### Supabase
 
 1. Crea un proyecto en Supabase.
-2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql`, `supabase/migrations/202609290001_family_profiles.sql`, `supabase/migrations/202609290002_authenticated_table_grants.sql` y `supabase/migrations/202609300001_household_invites_realtime.sql` desde el SQL Editor.
+2. Ejecuta en orden `supabase/migrations/202609260001_initial_schema.sql`, `supabase/migrations/202609290001_family_profiles.sql`, `supabase/migrations/202609290002_authenticated_table_grants.sql`, `supabase/migrations/202609300001_household_invites_realtime.sql` y `supabase/migrations/202609300002_monthly_budget_plan.sql` desde el SQL Editor.
 3. En Project Settings → API copia la URL del proyecto y la clave `publishable` (o la clave `anon` heredada).
 4. Crea `.env.local` en la carpeta de la app con `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 5. Agrega esas mismas variables en Vercel para Production, Preview y Development, y vuelve a desplegar.
@@ -66,6 +66,10 @@ Para compartir un hogar con otra cuenta, abre `Mi familia`, copia el código de 
 Los UUID existentes identifican hogares distintos aunque sus nombres o perfiles coincidan. La invitación no borra ni fusiona automáticamente esos hogares: para los dos hogares creados por separado, elijan cuál conservar, compartan el código de ese hogar y únanse a él antes de considerar limpiar el otro.
 
 En Mercado puedes guardar cada compra con tienda, fecha, cantidad y precio unitario por producto. El módulo compara el último precio registrado con la compra anterior de la misma unidad y contrasta el gasto total del mes con el anterior. Usa las tablas `market_purchases` y `market_purchase_items` existentes.
+
+La sección Presupuesto guarda los pagos previstos por concepto y categoría. La suma de sus partidas actualiza `households.monthly_budget` automáticamente; allí mismo se compara lo planificado con los gastos reales registrados durante el mes y se muestran las diferencias por categoría.
+
+Los movimientos de gastos utilizan el mismo catálogo de categorías del presupuesto para que las comparaciones coincidan. `Otros` permite registrar gastos no planificados; aparecen como gasto real fuera del plan y no aumentan el presupuesto previsto.
 
 No publiques claves `service_role` ni secretos en variables `NEXT_PUBLIC_*`.
 

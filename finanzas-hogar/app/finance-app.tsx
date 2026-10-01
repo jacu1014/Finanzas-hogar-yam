@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabase";
 
-type Section = "resumen" | "movimientos" | "presupuesto" | "deudas" | "mercado" | "analisis" | "familia";
+type Section = "resumen" | "movimientos" | "presupuesto" | "deudas" | "mercado" | "analisis" | "metas" | "familia";
 type Person = { id: string; name: string; relationship: string; user_id: string | null };
 type Movement = {
   id: string;
@@ -33,11 +33,13 @@ type Debt = {
   household_debt_payments: DebtPayment[];
 };
 type PlannedPayment = { id: string; name: string; category: string; planned_amount: number; due_day: number | null };
+type BudgetCategory = string;
 type MarketItem = { id: string; name: string; quantity: string; is_checked: boolean };
 type PurchaseLine = { id: string; name: string; quantity: number; unit: string; unit_price: number; line_total: number };
 type Purchase = { id: string; store: string; purchased_on: string; created_at: string; total_amount: number; market_purchase_items: PurchaseLine[] };
 type PurchaseDraftLine = { key: string; name: string; quantity: string; unit: string; unit_price: string };
 type Household = { id: string; name: string; currency: string; monthly_budget: number | null; invite_code: string };
+type Goal = { id: string; name: string; type: "saving" | "debt"; target_amount: number; current_amount: number; due_date: string; description: string };
 type AuthUser = { id: string; email?: string; user_metadata: { display_name?: string } };
 
 const supabase = getSupabaseClient();
@@ -48,9 +50,10 @@ const navigation: { id: Section; label: string; icon: string }[] = [
   { id: "deudas", label: "Deudas", icon: "▤" },
   { id: "mercado", label: "Mercado", icon: "▧" },
   { id: "analisis", label: "Análisis", icon: "⌁" },
+  { id: "metas", label: "Metas", icon: "◎" },
   { id: "familia", label: "Mi familia", icon: "♧" },
 ];
-const budgetCategories = ["Vivienda", "Servicios", "Alimentación", "Movilidad", "Salud", "Educación", "Deudas", "Hogar", "Otros"];
+const defaultBudgetCategories = ["Vivienda", "Servicios", "Alimentación", "Movilidad", "Salud", "Educación", "Deudas", "Hogar", "Otros"];
 
 function money(amount: number, currency = "COP") {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount || 0);
@@ -86,6 +89,7 @@ export default function FinanceApp() {
   const [people, setPeople] = useState<Person[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [plannedPayments, setPlannedPayments] = useState<PlannedPayment[]>([]);
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [shoppingListId, setShoppingListId] = useState<string | null>(null);
   const [shoppingItems, setShoppingItems] = useState<MarketItem[]>([]);
@@ -95,11 +99,21 @@ export default function FinanceApp() {
   const [query, setQuery] = useState("");
   const [showMovementForm, setShowMovementForm] = useState(false);
   const [movementKind, setMovementKind] = useState<"expense" | "income">("expense");
+  const [movementCategory, setMovementCategory] = useState("Otros");
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [payingDebtId, setPayingDebtId] = useState<string | null>(null);
+  const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
   const [newMarketItem, setNewMarketItem] = useState("");
   const [budgetDraft, setBudgetDraft] = useState({ name: "", category: "Hogar", plannedAmount: "", dueDay: "" });
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [debtDraft, setDebtDraft] = useState({ name: "", creditor: "", original_amount: "", interest_rate: "", total_installments: "", installment_amount: "", payment_frequency: "monthly", next_due_date: "" });
+  const [newBudgetCategory, setNewBudgetCategory] = useState("");
+  const [goals, setGoals] = useState<Goal[]>([
+    { id: "goal-emergency", name: "Fondo de emergencia", type: "saving", target_amount: 3000000, current_amount: 1200000, due_date: "2026-12-31", description: "Reserva para imprevistos del hogar." },
+    { id: "goal-debt", name: "Pago de crédito vehicular", type: "debt", target_amount: 12000000, current_amount: 7200000, due_date: "2027-03-31", description: "Reducir la deuda activa del hogar." },
+  ]);
+  const [goalDraft, setGoalDraft] = useState({ name: "", type: "saving" as Goal["type"], target_amount: "", current_amount: "", due_date: "", description: "" });
+  const [showGoalForm, setShowGoalForm] = useState(false);
 
   async function loadWorkspace(currentUser: AuthUser, requestedHouseholdId?: string, quiet = false) {
     if (!supabase) return;
@@ -144,16 +158,17 @@ export default function FinanceApp() {
     setHasHousehold(true);
     window.localStorage.setItem(`casa-clara-active-household-${currentUser.id}`, activeHousehold.id);
 
-    const [peopleResult, movementsResult, debtsResult, listsResult, purchasesResult, planResult] = await Promise.all([
+    const [peopleResult, movementsResult, debtsResult, listsResult, purchasesResult, planResult, categoriesResult] = await Promise.all([
       supabase.from("household_people").select("id, name, relationship, user_id").eq("household_id", householdId).order("created_at"),
       supabase.from("transactions").select("id, description, category, amount, kind, occurred_on, person_id, household_people(name)").eq("household_id", householdId).order("occurred_on", { ascending: false }),
       supabase.from("debts").select("id, name, creditor, original_amount, opening_balance, balance, interest_rate, total_installments, installment_amount, payment_frequency, due_date, next_due_date, household_debt_payments(id, paid_on, amount, principal_amount, interest_amount, counts_as_installment, notes)").eq("household_id", householdId).order("created_at", { ascending: false }),
       supabase.from("shopping_lists").select("id").eq("household_id", householdId).is("archived_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("market_purchases").select("id, store, purchased_on, created_at, total_amount, market_purchase_items(id, name, quantity, unit, unit_price, line_total)").eq("household_id", householdId).order("purchased_on", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("household_budget_items").select("id, name, category, planned_amount, due_day").eq("household_id", householdId).order("due_day", { ascending: true, nullsFirst: false }).order("created_at"),
+      supabase.from("household_budget_categories").select("id, name").eq("household_id", householdId).order("name"),
     ]);
 
-    const failed = [peopleResult, movementsResult, debtsResult, listsResult, purchasesResult, planResult].find((result) => result.error);
+    const failed = [peopleResult, movementsResult, debtsResult, listsResult, purchasesResult, planResult, categoriesResult].find((result) => result.error);
     if (failed?.error) {
       setErrorMessage("No se pudieron cargar los datos del hogar. Revisa que aplicaste la migración de perfiles familiares.");
       finishLoading();
@@ -165,6 +180,7 @@ export default function FinanceApp() {
     setDebts((debtsResult.data ?? []) as Debt[]);
     setPurchases((purchasesResult.data ?? []) as Purchase[]);
     setPlannedPayments((planResult.data ?? []) as PlannedPayment[]);
+    setBudgetCategories(((categoriesResult.data ?? []) as { id: string; name: string }[]).map((category) => category.name));
 
     let activeList = listsResult.data;
     if (!activeList) {
@@ -229,6 +245,7 @@ export default function FinanceApp() {
       .on("postgres_changes", { event: "*", schema: "public", table: "household_members", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "household_budget_items", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "household_budget_categories", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "debts", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "household_debt_payments" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "household_people", filter: `household_id=eq.${activeHouseholdId}` }, refresh)
@@ -299,6 +316,16 @@ export default function FinanceApp() {
       setBusy(false);
       return;
     }
+    const initialCategories = await supabase.from("household_budget_categories").insert(defaultBudgetCategories.map((name) => ({
+      household_id: created.data.id,
+      created_by: user.id,
+      name,
+    })));
+    if (initialCategories.error) {
+      setErrorMessage(initialCategories.error.message);
+      setBusy(false);
+      return;
+    }
     const profiles = [displayName, ...otherNames].map((name) => ({ household_id: created.data.id, created_by: user.id, user_id: name === displayName ? user.id : null, name, relationship: name === displayName ? "Administrador/a" : "Familiar" }));
     const addedPeople = await supabase.from("household_people").insert(profiles);
     if (addedPeople.error) {
@@ -351,39 +378,93 @@ export default function FinanceApp() {
     setBusy(false);
   }
 
-  async function addDebt(event: FormEvent<HTMLFormElement>) {
+  function resetDebtDraft() {
+    setEditingDebtId(null);
+    setDebtDraft({
+      name: "",
+      creditor: "",
+      original_amount: "",
+      interest_rate: "",
+      total_installments: "",
+      installment_amount: "",
+      payment_frequency: "monthly",
+      next_due_date: "",
+    });
+  }
+
+  function editDebt(debt: Debt) {
+    setEditingDebtId(debt.id);
+    setDebtDraft({
+      name: debt.name,
+      creditor: debt.creditor,
+      original_amount: String(debt.original_amount),
+      interest_rate: debt.interest_rate === null ? "" : String(debt.interest_rate),
+      total_installments: debt.total_installments === null ? "" : String(debt.total_installments),
+      installment_amount: debt.installment_amount === null ? "" : String(debt.installment_amount),
+      payment_frequency: debt.payment_frequency,
+      next_due_date: debt.next_due_date ?? "",
+    });
+    setShowDebtForm(true);
+  }
+
+  async function saveDebt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !hasUser || !householdState.id) return;
-    const form = new FormData(event.currentTarget);
-    const amount = Number(form.get("original_amount"));
+    const amount = Number(debtDraft.original_amount);
     if (!amount || amount <= 0) {
       setErrorMessage("Ingresa un monto original mayor que cero.");
       return;
     }
-    const installments = Number(form.get("total_installments")) || null;
-    const installmentAmount = Number(form.get("installment_amount")) || null;
-    const interestRateValue = String(form.get("interest_rate") ?? "").trim();
-    const dueDate = String(form.get("next_due_date") || "") || null;
-    setBusy(true);
-    const result = await supabase.from("debts").insert({
+    const installments = Number(debtDraft.total_installments) || null;
+    const installmentAmount = Number(debtDraft.installment_amount) || null;
+    const interestRateValue = debtDraft.interest_rate.trim();
+    const dueDate = debtDraft.next_due_date || null;
+    const currentDebt = editingDebtId ? debts.find((entry) => entry.id === editingDebtId) : null;
+    const paidPrincipal = currentDebt ? currentDebt.household_debt_payments.reduce((sum, payment) => sum + Number(payment.principal_amount), 0) : 0;
+    const nextBalance = currentDebt ? Math.max(Number(amount) - paidPrincipal, 0) : amount;
+    const payload = {
       household_id: householdState.id,
       created_by: user.id,
-      name: String(form.get("name")).trim(),
-      creditor: String(form.get("creditor")).trim(),
+      name: debtDraft.name.trim(),
+      creditor: debtDraft.creditor.trim(),
       original_amount: amount,
       opening_balance: amount,
-      balance: amount,
+      balance: nextBalance,
       interest_rate: interestRateValue ? Number(interestRateValue) : null,
       total_installments: installments,
       installment_amount: installmentAmount,
-      payment_frequency: String(form.get("payment_frequency")),
+      payment_frequency: debtDraft.payment_frequency,
       due_date: dueDate,
       next_due_date: dueDate,
-    });
+    };
+    setBusy(true);
+    const result = editingDebtId
+      ? await supabase.from("debts").update(payload).eq("id", editingDebtId)
+      : await supabase.from("debts").insert(payload);
     if (result.error) setErrorMessage(result.error.message);
     else {
       setShowDebtForm(false);
+      resetDebtDraft();
       await loadWorkspace(user);
+    }
+    setBusy(false);
+  }
+
+  async function deleteDebt(debtId: string) {
+    if (!supabase || !hasUser) return;
+    const debtToDelete = debts.find((debt) => debt.id === debtId);
+    if (!debtToDelete) return;
+    const confirmed = window.confirm(`¿Eliminar la deuda "${debtToDelete.name}" y sus abonos registrados?`);
+    if (!confirmed) return;
+    setBusy(true);
+    setErrorMessage("");
+    const result = await supabase.from("debts").delete().eq("id", debtId);
+    if (result.error) {
+      setErrorMessage(result.error.message);
+    } else {
+      if (payingDebtId === debtId) setPayingDebtId(null);
+      if (editingDebtId === debtId) resetDebtDraft();
+      await loadWorkspace(user, householdState.id, true);
     }
     setBusy(false);
   }
@@ -579,6 +660,31 @@ export default function FinanceApp() {
     setBusy(false);
   }
 
+  async function addBudgetCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newBudgetCategory.trim().replace(/\s+/g, " ");
+    if (!supabase || !householdState.id || !name) return;
+    if (budgetCategories.some((category) => category.localeCompare(name, "es", { sensitivity: "base" }) === 0)) {
+      setErrorMessage("Ya existe una categoría con ese nombre en este hogar.");
+      return;
+    }
+    setBusy(true);
+    setErrorMessage("");
+    const result = await supabase.from("household_budget_categories").insert({
+      household_id: householdState.id,
+      created_by: user.id,
+      name,
+    }).select("name").single();
+    if (result.error) setErrorMessage(result.error.message);
+    else {
+      setBudgetCategories((current) => [...current, result.data.name].sort((left, right) => left.localeCompare(right, "es")));
+      setBudgetDraft((current) => ({ ...current, category: result.data.name }));
+      setMovementCategory(result.data.name);
+      setNewBudgetCategory("");
+    }
+    setBusy(false);
+  }
+
   async function deletePlannedPayment(itemId: string) {
     if (!supabase) return;
     const result = await supabase.from("household_budget_items").delete().eq("id", itemId);
@@ -613,7 +719,21 @@ export default function FinanceApp() {
   const currentDate = new Date();
   const currentMarketMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
   const priorMarketMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-  const priorMarketMonth = `${priorMarketMonthDate.getFullYear()}-${String(priorMarketMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const priorMonthKey = `${priorMarketMonthDate.getFullYear()}-${String(priorMarketMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const priorMarketMonth = priorMonthKey;
+  const currentMonthIncome = income.filter((movement) => movement.occurred_on.startsWith(currentMonth)).reduce((sum, movement) => sum + Number(movement.amount), 0);
+  const previousMonthIncome = income.filter((movement) => movement.occurred_on.startsWith(priorMonthKey)).reduce((sum, movement) => sum + Number(movement.amount), 0);
+  const currentMonthTotalExpenses = expenses.filter((movement) => movement.occurred_on.startsWith(currentMonth)).reduce((sum, movement) => sum + Number(movement.amount), 0);
+  const previousMonthTotalExpenses = expenses.filter((movement) => movement.occurred_on.startsWith(priorMonthKey)).reduce((sum, movement) => sum + Number(movement.amount), 0);
+  const currentMonthExpenseCategories = expenses.filter((movement) => movement.occurred_on.startsWith(currentMonth)).reduce((totals, movement) => totals.set(movement.category, (totals.get(movement.category) ?? 0) + Number(movement.amount)), new Map<string, number>());
+  const fixedExpenseCategories = new Set(["Vivienda", "Servicios", "Deudas", "Movilidad", "Educación"]);
+  const variableExpenseCategories = new Set(["Alimentación", "Hogar", "Salud", "Otros"]);
+  const currentFixedExpenses = Array.from(currentMonthExpenseCategories.entries()).reduce((sum, [category, amount]) => fixedExpenseCategories.has(category) ? sum + amount : sum, 0);
+  const currentVariableExpenses = Array.from(currentMonthExpenseCategories.entries()).reduce((sum, [category, amount]) => variableExpenseCategories.has(category) ? sum + amount : sum, 0) + Array.from(currentMonthExpenseCategories.entries()).reduce((sum, [category, amount]) => !fixedExpenseCategories.has(category) && !variableExpenseCategories.has(category) ? sum + amount : sum, 0);
+  const currentSavings = currentMonthIncome - currentMonthTotalExpenses;
+  const previousSavings = previousMonthIncome - previousMonthTotalExpenses;
+  const savingsRate = currentMonthIncome > 0 ? (currentSavings / currentMonthIncome) * 100 : 0;
+  const debtLoadRatio = totalIncome > 0 ? (debtBalance / totalIncome) * 100 : 0;
   const marketTotalsByMonth = purchases.reduce((totals, purchase) => {
     const month = purchase.purchased_on.slice(0, 7);
     totals.set(month, (totals.get(month) ?? 0) + Number(purchase.total_amount));
@@ -636,6 +756,8 @@ export default function FinanceApp() {
   if (!supabase) {
     return <main className="auth-shell"><section className="auth-card"><a className="brand auth-brand" href="#"><span className="brand-mark">c.</span><span>casa clara<small>FINANZAS DEL HOGAR</small></span></a><span className="eyebrow">CONFIGURACIÓN NECESARIA</span><h1>Conecta tu hogar</h1><p>Configura las variables de Supabase para habilitar el acceso familiar.</p><div className="setup-help"><strong>Variables requeridas</strong><code>NEXT_PUBLIC_SUPABASE_URL</code><code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code><small>En local, agrégalas a <b>.env.local</b>. En Vercel, añádelas en Settings → Environment Variables y redepliega.</small></div></section></main>;
   }
+
+  const movementCategoryOptions = movementKind === "income" ? ["Salario", ...budgetCategories] : budgetCategories;
 
   if (!hasUser) {
     return <main className="auth-shell"><section className="auth-card"><a className="brand auth-brand" href="#"><span className="brand-mark">c.</span><span>casa clara<small>FINANZAS DEL HOGAR</small></span></a><span className="eyebrow">UN ESPACIO PARA TU FAMILIA</span><h1>{authMode === "login" ? "Bienvenidos a casa." : "Crea tu acceso familiar."}</h1><p>{authMode === "login" ? "Inicia sesión para ver las cuentas de tu hogar." : "Registra una cuenta y configura los datos de tu hogar."}</p><form className="auth-form" onSubmit={handleAuth}>{authMode === "signup" && <label>Tu nombre<input name="display_name" autoComplete="name" required placeholder="Nombre y apellido" /></label>}<label>Correo electrónico<input name="email" type="email" autoComplete="email" required placeholder="tu@correo.com" /></label><label>Contraseña<input name="password" type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} required placeholder="Mínimo 8 caracteres" /></label><button className="primary-button auth-submit" disabled={busy}>{busy ? "Un momento…" : authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}</button></form><button className="auth-switch" onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthMessage(""); setErrorMessage(""); }}>{authMode === "login" ? "¿Primera vez? Crear una cuenta" : "Ya tengo una cuenta · Iniciar sesión"}</button>{authMessage && <p className="success-message">{authMessage}</p>}{errorMessage && <p className="error-message">{errorMessage}</p>}<p className="auth-foot">Acceso privado · Datos protegidos por tu hogar</p></section></main>;
@@ -703,6 +825,12 @@ export default function FinanceApp() {
         <article className={`budget-overview-card ${budgetDifference > 0 ? "over-budget" : "under-budget"}`}><span>{budgetDifference > 0 ? "Sobre el plan" : "Disponible del plan"}</span><strong>{money(Math.abs(budgetDifference), householdState.currency)}</strong><small>{plannedTotal > 0 ? `${executionPercent.toFixed(1)}% del plan ejecutado` : "Agrega pagos para definir el presupuesto"}</small></article>
       </section>
 
+      <section className="content-panel category-management-panel">
+        <div className="panel-heading"><div><span className="eyebrow">CATÁLOGO DEL HOGAR</span><h2>Categorías disponibles</h2></div></div>
+        <div className="category-name-list">{budgetCategories.map((category) => <span className="category-name-chip" key={category}>{category}</span>)}</div>
+        <form className="add-budget-category-form" onSubmit={addBudgetCategory}><label htmlFor="new-budget-category">Agregar una categoría</label><div><input id="new-budget-category" value={newBudgetCategory} onChange={(event) => setNewBudgetCategory(event.target.value)} maxLength={60} required placeholder="Ej. Mascotas, Cuidado personal" /><button className="quiet-button" type="submit" disabled={busy}>＋ Agregar categoría</button></div><small>La nueva categoría estará disponible para el presupuesto y los movimientos de todos los miembros.</small></form>
+      </section>
+
       <section className="content-panel budget-plan-panel">
         <div className="panel-heading"><div><span className="eyebrow">PAGOS Y GASTOS PREVISTOS</span><h2>Plan del hogar</h2></div></div>
         <form className="inline-form planned-payment-form" onSubmit={savePlannedPayment}>
@@ -747,17 +875,20 @@ export default function FinanceApp() {
       </section>
 
       <section className="content-panel debt-create-panel">
-        <div className="panel-heading"><div><span className="eyebrow">OBLIGACIONES DEL HOGAR</span><h2>Registrar una deuda</h2></div><button className="quiet-button" type="button" onClick={() => setShowDebtForm((value) => !value)}>{showDebtForm ? "Cerrar" : "＋ Nueva deuda"}</button></div>
-        {showDebtForm && <form className="debt-create-form" onSubmit={addDebt}>
-          <label>Nombre de la deuda<input name="name" required placeholder="Ej. Crédito de vehículo" /></label>
-          <label>Acreedor<input name="creditor" placeholder="Banco o entidad" /></label>
-          <label>Monto original<input name="original_amount" type="number" min="1" step="1" required placeholder="COP" /></label>
-          <label>Tasa anual (%)<input name="interest_rate" type="number" min="0" step="0.01" placeholder="0" /></label>
-          <label>Número de cuotas<input name="total_installments" type="number" min="1" step="1" placeholder="Opcional" /></label>
-          <label>Valor por cuota<input name="installment_amount" type="number" min="1" step="1" placeholder="Opcional" /></label>
-          <label>Frecuencia<select name="payment_frequency"><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select></label>
-          <label>Primer vencimiento<input name="next_due_date" type="date" /></label>
-          <button className="primary-button debt-create-submit" disabled={busy}>{busy ? "Guardando…" : "Guardar deuda"}</button>
+        <div className="panel-heading"><div><span className="eyebrow">OBLIGACIONES DEL HOGAR</span><h2>{editingDebtId ? "Editar deuda" : "Registrar una deuda"}</h2></div><button className="quiet-button" type="button" onClick={() => { if (showDebtForm) { resetDebtDraft(); } setShowDebtForm((value) => !value); }}>{showDebtForm ? "Cerrar" : "＋ Nueva deuda"}</button></div>
+        {showDebtForm && <form className="debt-create-form" onSubmit={saveDebt}>
+          <label>Nombre de la deuda<input value={debtDraft.name} onChange={(event) => setDebtDraft((current) => ({ ...current, name: event.target.value }))} required placeholder="Ej. Crédito de vehículo" /></label>
+          <label>Acreedor<input value={debtDraft.creditor} onChange={(event) => setDebtDraft((current) => ({ ...current, creditor: event.target.value }))} placeholder="Banco o entidad" /></label>
+          <label>Monto original<input value={debtDraft.original_amount} onChange={(event) => setDebtDraft((current) => ({ ...current, original_amount: event.target.value }))} type="number" min="1" step="1" required placeholder="COP" /></label>
+          <label>Tasa anual (%)<input value={debtDraft.interest_rate} onChange={(event) => setDebtDraft((current) => ({ ...current, interest_rate: event.target.value }))} type="number" min="0" step="0.01" placeholder="0" /></label>
+          <label>Número de cuotas<input value={debtDraft.total_installments} onChange={(event) => setDebtDraft((current) => ({ ...current, total_installments: event.target.value }))} type="number" min="1" step="1" placeholder="Opcional" /></label>
+          <label>Valor por cuota<input value={debtDraft.installment_amount} onChange={(event) => setDebtDraft((current) => ({ ...current, installment_amount: event.target.value }))} type="number" min="1" step="1" placeholder="Opcional" /></label>
+          <label>Frecuencia<select value={debtDraft.payment_frequency} onChange={(event) => setDebtDraft((current) => ({ ...current, payment_frequency: event.target.value }))}><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select></label>
+          <label>Primer vencimiento<input value={debtDraft.next_due_date} onChange={(event) => setDebtDraft((current) => ({ ...current, next_due_date: event.target.value }))} type="date" /></label>
+          <div className="debt-form-actions">
+            <button className="primary-button debt-create-submit" type="submit" disabled={busy}>{busy ? "Guardando…" : editingDebtId ? "Actualizar deuda" : "Guardar deuda"}</button>
+            {editingDebtId && <button className="text-button" type="button" onClick={() => { setShowDebtForm(false); resetDebtDraft(); }}>Cancelar</button>}
+          </div>
         </form>}
       </section>
 
@@ -769,7 +900,7 @@ export default function FinanceApp() {
         const principalProgress = Number(debt.original_amount) > 0 ? Math.min(principalPaid / Number(debt.original_amount) * 100, 100) : 0;
         const overdue = debt.balance > 0 && debt.next_due_date !== null && debt.next_due_date < today;
         return <article className="content-panel debt-card" key={debt.id}>
-          <div className="debt-card-heading"><div><span className="eyebrow">{debt.creditor || "ACREEDOR NO INDICADO"}</span><h2>{debt.name}</h2></div><span className={`debt-status ${debt.balance <= 0 ? "paid" : overdue ? "overdue" : "active"}`}>{debt.balance <= 0 ? "Pagada" : overdue ? "Vencida" : "Activa"}</span></div>
+          <div className="debt-card-heading"><div><span className="eyebrow">{debt.creditor || "ACREEDOR NO INDICADO"}</span><h2>{debt.name}</h2></div><div className="debt-card-actions"><button className="text-button" type="button" onClick={() => editDebt(debt)}>Editar</button><button className="remove-shopping-item" type="button" aria-label={`Eliminar ${debt.name}`} title="Eliminar deuda" onClick={() => void deleteDebt(debt.id)}>×</button><span className={`debt-status ${debt.balance <= 0 ? "paid" : overdue ? "overdue" : "active"}`}>{debt.balance <= 0 ? "Pagada" : overdue ? "Vencida" : "Activa"}</span></div></div>
           <div className="debt-metrics"><div><span>Saldo pendiente</span><strong>{money(Number(debt.balance), householdState.currency)}</strong></div><div><span>Monto original</span><strong>{money(Number(debt.original_amount), householdState.currency)}</strong></div><div><span>Tasa anual</span><strong>{debt.interest_rate === null ? "No indicada" : `${Number(debt.interest_rate).toFixed(2)}%`}</strong></div><div><span>Próximo vencimiento</span><strong>{debt.next_due_date ? shortDate(debt.next_due_date) : "No indicado"}</strong></div></div>
           <div className="debt-progress"><div><span>Capital pagado · {principalProgress.toFixed(1)}%</span><strong>{debt.total_installments ? `${installmentsPaid} de ${debt.total_installments} cuotas` : `${installmentsPaid} cuotas registradas`}</strong></div><div className="progress-track"><i style={{ width: `${principalProgress}%` }} /></div></div>
           <div className="debt-card-footer"><span>Pagado en total <strong>{money(totalPaid, householdState.currency)}</strong>{debt.installment_amount ? <small> · Cuota esperada {money(Number(debt.installment_amount), householdState.currency)} {debt.payment_frequency === "monthly" ? "mensual" : debt.payment_frequency === "biweekly" ? "quincenal" : "semanal"}</small> : null}</span><button className="primary-button" type="button" disabled={Number(debt.balance) <= 0} onClick={() => setPayingDebtId((current) => current === debt.id ? null : debt.id)}>{payingDebtId === debt.id ? "Cerrar" : "＋ Registrar pago"}</button></div>
@@ -780,12 +911,86 @@ export default function FinanceApp() {
     </div>;
   }
 
+  function addGoal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = goalDraft.name.trim();
+    const targetAmount = Number(goalDraft.target_amount);
+    const currentAmount = Number(goalDraft.current_amount);
+    if (!name || !goalDraft.due_date || Number.isNaN(targetAmount) || targetAmount <= 0) return;
+    const nextGoal: Goal = {
+      id: `goal-${Date.now()}`,
+      name,
+      type: goalDraft.type,
+      target_amount: targetAmount,
+      current_amount: Number.isNaN(currentAmount) ? 0 : currentAmount,
+      due_date: goalDraft.due_date,
+      description: goalDraft.description.trim(),
+    };
+    setGoals((current) => [nextGoal, ...current]);
+    setGoalDraft({ name: "", type: "saving", target_amount: "", current_amount: "", due_date: "", description: "" });
+    setShowGoalForm(false);
+    setErrorMessage("");
+  }
+
+  function renderGoals() {
+    const totalSavingsProgress = goals.filter((goal) => goal.type === "saving").reduce((sum, goal) => sum + Math.min(goal.current_amount / goal.target_amount, 1), 0);
+    const savingGoals = goals.filter((goal) => goal.type === "saving");
+    const debtGoals = goals.filter((goal) => goal.type === "debt");
+    return <div className="goal-workspace"><section className="content-panel goal-overview-panel"><div className="panel-heading"><div><span className="eyebrow">METAS DEL HOGAR</span><h2>Objetivos financieros</h2></div><button className="quiet-button" type="button" onClick={() => setShowGoalForm((value) => !value)}>{showGoalForm ? "Cerrar" : "＋ Nueva meta"}</button></div>{showGoalForm && <form className="goal-form" onSubmit={addGoal}><label>Nombre de la meta<input value={goalDraft.name} onChange={(event) => setGoalDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Vacaciones" required /></label><label>Tipo<select value={goalDraft.type} onChange={(event) => setGoalDraft((current) => ({ ...current, type: event.target.value as Goal["type"] }))}><option value="saving">Ahorro</option><option value="debt">Deuda</option></select></label><label>Objetivo<input value={goalDraft.target_amount} onChange={(event) => setGoalDraft((current) => ({ ...current, target_amount: event.target.value }))} type="number" min="1" step="1000" placeholder="COP" required /></label><label>Valor actual<input value={goalDraft.current_amount} onChange={(event) => setGoalDraft((current) => ({ ...current, current_amount: event.target.value }))} type="number" min="0" step="1000" placeholder="COP" /></label><label>Fecha límite<input value={goalDraft.due_date} onChange={(event) => setGoalDraft((current) => ({ ...current, due_date: event.target.value }))} type="date" required /></label><label>Descripción<input value={goalDraft.description} onChange={(event) => setGoalDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Opcional" /></label><button className="primary-button" type="submit">Guardar meta</button></form>}<div className="goal-summary-grid"><article className="goal-summary-card"><span>Metas de ahorro</span><strong>{savingGoals.length}</strong><small>{savingGoals.length ? `${savingGoals.filter((goal) => goal.current_amount >= goal.target_amount).length} cumplidas` : "Sin objetivos"}</small></article><article className="goal-summary-card"><span>Metas de deuda</span><strong>{debtGoals.length}</strong><small>{debtGoals.length ? `${debtGoals.filter((goal) => goal.current_amount >= goal.target_amount).length} cerradas` : "Sin objetivos"}</small></article><article className="goal-summary-card accent"><span>Avance total</span><strong>{savingGoals.length ? `${Math.min((totalSavingsProgress / Math.max(savingGoals.length, 1)) * 100, 100).toFixed(0)}%` : "0%"}</strong><small>Promedio de objetivos en ahorro</small></article></div></section><section className="content-panel goal-list-panel"><div className="panel-heading"><div><span className="eyebrow">PROGRESO</span><h2>Seguimiento</h2></div></div>{goals.length ? <div className="goal-list">{goals.map((goal) => { const progress = Math.min(goal.current_amount / Math.max(goal.target_amount, 1), 1) * 100; const remaining = Math.max(goal.target_amount - goal.current_amount, 0); const status = goal.current_amount >= goal.target_amount ? "Cumplido" : progress >= 75 ? "Cerca" : progress >= 50 ? "Avanzando" : "En curso"; return <article className="goal-card" key={goal.id}><div className="goal-card-head"><div><span className={`goal-tag ${goal.type}`}>{goal.type === "saving" ? "Ahorro" : "Deuda"}</span><h3>{goal.name}</h3></div><strong>{status}</strong></div><p>{goal.description || "Meta sin descripción adicional."}</p><div className="goal-progress"><div className="progress-track"><i style={{ width: `${progress}%` }} /></div><span>{progress.toFixed(0)}%</span></div><div className="goal-meta"><strong>{money(goal.current_amount, householdState.currency)}</strong><small>de {money(goal.target_amount, householdState.currency)} · vence {shortDate(goal.due_date)}</small>{remaining > 0 ? <em>Falta {money(remaining, householdState.currency)}</em> : <em>Objetivo cumplido</em>}</div></article>; })}</div> : <EmptyState title="Sin metas definidas" detail="Agrega metas de ahorro o reducción de deuda para seguir objetivos concretos del hogar." />}</section></div>;
+  }
+
   function renderModule() {
     if (section === "movimientos") return <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">REGISTRO DEL HOGAR</span><h2>Movimientos</h2></div><label className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar movimiento" /></label></div>{renderTransactions(filteredMovements)}</section>;
     if (section === "presupuesto") return renderBudget();
     if (section === "deudas") return renderDebts();
     if (section === "mercado") return renderMarket();
-    if (section === "analisis") return <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">LECTURA DE TUS DATOS</span><h2>Resumen financiero</h2></div></div>{movements.length ? <><div className="analysis-totals"><div><span>Ingresos registrados</span><strong>{money(totalIncome, householdState.currency)}</strong></div><div><span>Gastos registrados</span><strong>{money(totalExpenses, householdState.currency)}</strong></div><div><span>Balance</span><strong>{money(totalIncome - totalExpenses, householdState.currency)}</strong></div></div><h3 className="subheading">Gastos por categoría</h3>{Array.from(expenses.reduce((groups, movement) => groups.set(movement.category, (groups.get(movement.category) ?? 0) + Number(movement.amount)), new Map<string, number>())).map(([category, amount]) => <div className="category-stat" key={category}><div><span>{category}</span><strong>{money(amount, householdState.currency)}</strong></div><div className="progress-track"><i style={{ width: `${totalExpenses ? (amount / totalExpenses) * 100 : 0}%` }} /></div></div>)}</> : <EmptyState title="El análisis aparecerá aquí" detail="Primero registra ingresos y gastos. Las gráficas se calcularán solo con información de tu hogar." />}</section>;
+    if (section === "metas") return renderGoals();
+    if (section === "analisis") {
+      const categoryRank = Array.from(currentMonthExpenseCategories.entries()).sort((left, right) => right[1] - left[1]);
+      const structuredPacing = currentMonthTotalExpenses > 0 ? (currentMonthTotalExpenses / Math.max(plannedTotal || 1, 1)) * 100 : 0;
+      const fixedVariableDelta = currentFixedExpenses - currentVariableExpenses;
+      const recommendedMonthlySavings = Math.max(currentMonthIncome * 0.2, 0);
+      const topCategory = categoryRank[0]?.[0] ?? "Sin datos";
+      const topCategoryValue = categoryRank[0]?.[1] ?? 0;
+      const expenseStructureMessage = currentSavings < 0 ? "El hogar está gastando más de lo que ingresa. Lo más efectivo es revisar primero las categorías variables." : currentFixedExpenses > currentVariableExpenses ? "El gasto fijo pesa más que el variable. Hay margen para mantener el ahorro si moderas compras no esenciales." : "La estructura está equilibrada. Mantén el gasto variable bajo control y sigue reforzando el ahorro.";
+      const budgetHealthState = structuredPacing <= 90 ? "Bajo el plan" : structuredPacing <= 110 ? "Dentro del rango" : "Por encima del plan";
+      const debtHealthState = debtBalance <= 0 ? "Sin deuda" : debtLoadRatio <= 35 ? "Controlada" : debtLoadRatio <= 60 ? "Moderada" : "Alta";
+      const monthlyExecutiveStatus = currentSavings >= 0 ? "Salud financiera sólida" : "Necesita ajuste de gastos";
+      const monthlyExecutiveMessage = currentSavings >= 0 ? "El hogar está generando margen y puedes mantener o fortalecer el ahorro del próximo mes." : "El flujo actual está presionado; prioriza recortar gastos variables y revisar la deuda antes de ampliar compromisos.";
+      const categoryAlerts = comparisonCategories
+        .map((category) => {
+          const planned = plannedByCategory.get(category) ?? 0;
+          const actual = actualExpensesByCategory.get(category) ?? 0;
+          if (planned <= 0 || actual <= planned) return null;
+          return {
+            category,
+            excess: actual - planned,
+            ratio: (actual / planned) * 100,
+          };
+        })
+        .filter((entry): entry is { category: string; excess: number; ratio: number } => !!entry)
+        .sort((left, right) => right.excess - left.excess)
+        .slice(0, 3);
+      const budgetAlerts = [
+        currentSavings < 0 ? { level: "danger", title: "Ahorro negativo", text: `El mes está en rojo con ${money(Math.abs(currentSavings), householdState.currency)} por debajo del ingreso.` } : null,
+        structuredPacing > 110 ? { level: "warning", title: "Por encima del plan", text: `Los gastos ya superan el plan en ${((structuredPacing - 100)).toFixed(0)}%.` } : null,
+        categoryAlerts.length > 0 ? { level: "warning", title: "Categorías elevadas", text: `${categoryAlerts[0].category} está ${money(categoryAlerts[0].excess, householdState.currency)} por encima del presupuesto.` } : null,
+      ].filter(Boolean) as Array<{ level: string; title: string; text: string }>;
+      const sixMonthTrend = Array.from({ length: 6 }, (_, index) => {
+        const monthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - (5 - index), 1);
+        const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`;
+        const incomeForMonth = income.filter((movement) => movement.occurred_on.startsWith(monthKey)).reduce((sum, movement) => sum + Number(movement.amount), 0);
+        const expensesForMonth = expenses.filter((movement) => movement.occurred_on.startsWith(monthKey)).reduce((sum, movement) => sum + Number(movement.amount), 0);
+        return {
+          month: monthKey,
+          label: new Intl.DateTimeFormat("es-CO", { month: "short" }).format(monthDate),
+          income: incomeForMonth,
+          expenses: expensesForMonth,
+          savings: incomeForMonth - expensesForMonth,
+        };
+      });
+      return <section className="analysis-section"><div className="panel-heading"><div><span className="eyebrow">LECTURA DE TUS DATOS</span><h2>Panel de control financiero</h2></div></div>{movements.length ? <><div className="analysis-kpis"><article className="analysis-kpi"><span>Ingreso del mes</span><strong>{money(currentMonthIncome, householdState.currency)}</strong><small>{previousMonthIncome > 0 ? `${currentMonthIncome >= previousMonthIncome ? "↑" : "↓"} ${Math.abs(((currentMonthIncome - previousMonthIncome) / previousMonthIncome) * 100 || 0).toFixed(1)}% vs. mes anterior` : "Sin comparación"}</small></article><article className="analysis-kpi"><span>Gastos del mes</span><strong>{money(currentMonthTotalExpenses, householdState.currency)}</strong><small>{previousMonthTotalExpenses > 0 ? `${currentMonthTotalExpenses >= previousMonthTotalExpenses ? "↑" : "↓"} ${Math.abs(((currentMonthTotalExpenses - previousMonthTotalExpenses) / previousMonthTotalExpenses) * 100 || 0).toFixed(1)}% vs. mes anterior` : "Sin comparación"}</small></article><article className="analysis-kpi"><span>Ahorro neto</span><strong>{money(currentSavings, householdState.currency)}</strong><small>{savingsRate >= 0 ? `${savingsRate.toFixed(1)}% del ingreso` : "Por debajo del ingreso"}</small></article><article className="analysis-kpi"><span>Carga de deuda</span><strong>{debtBalance > 0 ? `${debtLoadRatio.toFixed(1)}%` : "Sin deuda"}</strong><small>{debtBalance > 0 ? `${money(debtBalance, householdState.currency)} pendiente` : "Sin obligaciones activas"}</small></article></div>{budgetAlerts.length > 0 && <div className="analysis-alert-stack">{budgetAlerts.map((alert) => <div className={`analysis-alert ${alert.level}`} key={alert.title}><strong>{alert.title}</strong><span>{alert.text}</span></div>)}</div>}<section className="analysis-card analysis-summary-card"><div className="panel-heading tight"><div><span className="eyebrow">RESUMEN</span><h3>Estado del mes</h3></div></div><div className="analysis-summary-main">{monthlyExecutiveStatus}</div><div className="analysis-note">{monthlyExecutiveMessage}</div><div className="analysis-totals"><div><span>Plan</span><strong>{budgetHealthState}</strong></div><div><span>Deuda</span><strong>{debtHealthState}</strong></div><div><span>Foco</span><strong>{currentSavings >= 0 ? "Ahorro" : "Gasto"}</strong></div></div></section><section className="analysis-card analysis-trend-card"><div className="panel-heading tight"><div><span className="eyebrow">TENDENCIA</span><h3>Últimos 6 meses</h3></div></div><div className="analysis-trend-list">{sixMonthTrend.map((entry) => <div className="analysis-trend-row" key={entry.month}><span>{entry.label}</span><strong>{money(entry.expenses, householdState.currency)}</strong><small>{money(entry.savings, householdState.currency)} ahorro</small></div>)}</div></section><div className="analysis-grid"><section className="analysis-card"><div className="panel-heading tight"><div><span className="eyebrow">RECOMENDACIÓN</span><h3>Qué ajustar ahora</h3></div></div><div className="analysis-note">{expenseStructureMessage}</div><div className="analysis-totals"><div><span>Top categoría</span><strong>{topCategory}</strong></div><div><span>Valor</span><strong>{money(topCategoryValue, householdState.currency)}</strong></div><div><span>Meta ahorro</span><strong>{money(recommendedMonthlySavings, householdState.currency)}</strong></div></div></section><section className="analysis-card"><div className="panel-heading tight"><div><span className="eyebrow">ESTRUCTURA DEL GASTO</span><h3>Fijos vs variables</h3></div></div><div className="analysis-split"><div><span>Fijos</span><strong>{money(currentFixedExpenses, householdState.currency)}</strong></div><div><span>Variables</span><strong>{money(currentVariableExpenses, householdState.currency)}</strong></div></div><div className="analysis-breakdown"><div className="analysis-breakdown-row"><span>Fijos</span><div className="progress-track"><i style={{ width: `${Math.min((currentFixedExpenses / Math.max(currentMonthTotalExpenses, 1)) * 100, 100)}%` }} /></div><strong>{money(currentFixedExpenses, householdState.currency)}</strong></div><div className="analysis-breakdown-row"><span>Variables</span><div className="progress-track"><i className="coral" style={{ width: `${Math.min((currentVariableExpenses / Math.max(currentMonthTotalExpenses, 1)) * 100, 100)}%` }} /></div><strong>{money(currentVariableExpenses, householdState.currency)}</strong></div></div><small className="analysis-note">{fixedVariableDelta >= 0 ? `Los gastos fijos están por encima del nivel variable por ${money(Math.abs(fixedVariableDelta), householdState.currency)}.` : `Los gastos variables están por encima de los fijos por ${money(Math.abs(fixedVariableDelta), householdState.currency)}.`}</small></section><section className="analysis-card"><div className="panel-heading tight"><div><span className="eyebrow">RITMO DEL HOGAR</span><h3>Mes actual vs anterior</h3></div></div><div className="analysis-split"><div><span>Mes actual</span><strong>{money(currentMonthTotalExpenses, householdState.currency)}</strong></div><div><span>Mes anterior</span><strong>{money(previousMonthTotalExpenses, householdState.currency)}</strong></div></div><div className="analysis-breakdown"><div className="analysis-breakdown-row"><span>Presupuesto</span><div className="progress-track"><i className="blue" style={{ width: `${Math.min(structuredPacing, 100)}%` }} /></div><strong>{money(plannedTotal, householdState.currency)}</strong></div><div className="analysis-breakdown-row"><span>Ahorro</span><div className="progress-track"><i className="yellow" style={{ width: `${Math.min(Math.max((Math.max(currentSavings, 0) / Math.max(currentMonthIncome, 1)) * 100), 100)}%` }} /></div><strong>{money(currentSavings, householdState.currency)}</strong></div></div><small className="analysis-note">{currentSavings >= previousSavings ? `El ahorro mejoró ${money(Math.abs(currentSavings - previousSavings), householdState.currency)} respecto al mes pasado.` : `El ahorro cayó ${money(Math.abs(currentSavings - previousSavings), householdState.currency)} respecto al mes pasado.`}</small></section></div><div className="analysis-categories"><div className="panel-heading tight"><div><span className="eyebrow">DESGLOSE</span><h3>Gastos por categoría</h3></div></div>{categoryRank.map(([category, amount]) => <div className="category-stat" key={category}><div><span>{category}</span><strong>{money(amount, householdState.currency)}</strong></div><div className="progress-track"><i style={{ width: `${currentMonthTotalExpenses ? (amount / currentMonthTotalExpenses) * 100 : 0}%` }} /></div></div>)}</div></> : <EmptyState title="El análisis aparecerá aquí" detail="Primero registra ingresos y gastos. Las gráficas se calcularán solo con información de tu hogar." />}</section>;
+    }
     if (section === "familia") return <div className="family-layout">
       <section className="content-panel">
         <div className="panel-heading"><div><span className="eyebrow">PERSONAS DEL HOGAR</span><h2>{householdState.name}</h2></div></div>
@@ -812,5 +1017,5 @@ export default function FinanceApp() {
     return <div className="dashboard-grid"><section className="content-panel recent-panel"><div className="panel-heading"><div><span className="eyebrow">ACTIVIDAD RECIENTE</span><h2>Últimos movimientos</h2></div><button className="text-button" onClick={() => setSection("movimientos")}>Ver todos <span aria-hidden="true">→</span></button></div>{renderTransactions(movements.slice(0, 5))}</section><section className="content-panel household-panel"><div className="panel-heading"><div><span className="eyebrow">INGRESOS POR PERSONA</span><h2>Aportes del hogar</h2></div><button className="more-button" aria-label="Ver familia" onClick={() => setSection("familia")}>···</button></div>{people.length ? people.map((person) => <div className="person-row" key={person.id}><span className="avatar avatar-green">{person.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span><div><strong>{person.name}</strong><small>{person.relationship}</small></div><b>{money(income.filter((movement) => movement.person_id === person.id).reduce((sum, movement) => sum + Number(movement.amount), 0), householdState.currency)}</b></div>) : <EmptyState title="Agrega a tu familia" detail="Completa los perfiles desde Mi familia." />}<div className="household-total"><span>Ingresos del hogar</span><strong>{money(totalIncome, householdState.currency)}</strong></div></section><section className="content-panel budget-panel"><div><span className="eyebrow">PRESUPUESTO MENSUAL</span><h2>Gastos de este mes</h2></div><div className="budget-amount"><strong>{money(currentExpenses, householdState.currency)}</strong><span>{householdState.monthly_budget ? `de ${money(Number(householdState.monthly_budget), householdState.currency)}` : "sin presupuesto definido"}</span></div>{householdState.monthly_budget ? <><div className="progress-track"><i style={{ width: `${Math.min((currentExpenses / Number(householdState.monthly_budget)) * 100, 100)}%` }} /></div><div className="budget-note"><span>{Math.round((currentExpenses / Number(householdState.monthly_budget)) * 100)}% utilizado</span><span>{money(Math.max(Number(householdState.monthly_budget) - currentExpenses, 0), householdState.currency)} disponible</span></div></> : <button className="text-button" onClick={() => setSection("familia")}>Definir presupuesto →</button>}</section><section className="content-panel market-teaser"><div><span className="eyebrow">LISTA DE COMPRA</span><h2>Mercado del hogar</h2><p>{shoppingItems.filter((item) => !item.is_checked).length} productos pendientes</p></div><button className="quiet-button" onClick={() => setSection("mercado")}>Abrir lista <span aria-hidden="true">→</span></button></section></div>;
   }
 
-  return <main className="app-shell"><aside className="sidebar"><a className="brand" href="#inicio" onClick={() => setSection("resumen")}><span className="brand-mark">c.</span><span>casa clara<small>FINANZAS DEL HOGAR</small></span></a><div className="home-switcher"><span className="home-avatar">{householdState.name.slice(0, 1).toUpperCase()}</span><span><strong>{householdState.name}</strong><small>Hogar familiar</small></span></div><span className="nav-label">ESPACIO DEL HOGAR</span><nav className="main-nav" aria-label="Navegación principal">{navigation.map((item) => <button className={section === item.id ? "nav-item active" : "nav-item"} key={item.id} onClick={() => setSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span>{item.label}{item.id === "mercado" && shoppingItems.length > 0 && <span className="nav-badge">{shoppingItems.filter((entry) => !entry.is_checked).length}</span>}</button>)}</nav><div className="sidebar-bottom"><div className="sync-status"><span className="status-dot connected" /><span><strong>Conectado a Supabase</strong><small>Datos sincronizados</small></span></div><button className="profile-button" onClick={logout}><span className="avatar avatar-dark">{(user.user_metadata.display_name ?? user.email ?? "F").slice(0, 1).toUpperCase()}</span><span><strong>{user.user_metadata.display_name ?? user.email}</strong><small>Cerrar sesión</small></span><span className="switch-chevron">↪</span></button></div></aside><section className="workspace"><header className="topbar"><div className="breadcrumb">{householdState.name} <span>/</span> <strong>{active.label}</strong></div><div className="topbar-actions">{households.length > 1 && <label className="household-select-label"><span className="sr-only">Hogar activo</span><select className="household-select" aria-label="Cambiar hogar activo" value={householdState.id} onChange={(event) => void switchHousehold(event.target.value)}>{households.map((household) => <option key={household.id} value={household.id}>{household.name}</option>)}</select></label>}<span className="currency-label">{householdState.currency}</span><button className="primary-button" onClick={() => setShowMovementForm((value) => !value)}><span aria-hidden="true">＋</span> Nuevo movimiento</button></div></header><div className="page-content"><div className="page-title"><div><span className="eyebrow">{new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long" }).format(new Date()).toLocaleUpperCase("es-CO")}</span><h1>{section === "resumen" ? "Las cuentas, claras." : active.label}</h1><p>{section === "resumen" ? `Información real de ${householdState.name}.` : `Organiza ${active.label.toLowerCase()} de tu hogar.`}</p></div><span className="connected-chip"><i /> Datos de tu hogar</span></div>{errorMessage && <div className="inline-error">{errorMessage}</div>}{showMovementForm && <section className="content-panel form-panel"><div className="panel-heading"><div><span className="eyebrow">REGISTRO FAMILIAR</span><h2>Nuevo movimiento</h2></div><button className="modal-close" aria-label="Cerrar formulario" onClick={() => setShowMovementForm(false)}>×</button></div><form className="inline-form" onSubmit={addMovement}><label>Tipo<select name="kind" value={movementKind} onChange={(event) => setMovementKind(event.target.value as "expense" | "income")}><option value="expense">Gasto</option><option value="income">Ingreso</option></select></label><label>Concepto<input name="description" required placeholder="Ej. Mercado semanal" /></label><label>Valor en COP<input name="amount" type="number" min="1" required placeholder="0" /></label><label>Categoría<select name="category">{(movementKind === "income" ? ["Salario", ...budgetCategories] : budgetCategories).map((category) => <option key={category}>{category}</option>)}</select></label><label>Persona<select name="person_id"><option value="">Sin asignar</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label>Fecha<input name="occurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label><button className="primary-button" disabled={busy}>Guardar movimiento</button></form></section>}{section === "resumen" && <div className="summary-grid"><article className="summary-card balance-card"><span>Balance registrado</span><strong>{money(totalIncome - totalExpenses, householdState.currency)}</strong><small>Ingresos menos gastos cargados</small><span className="card-sparkline" aria-hidden="true">⌁　⌁　⌁</span></article><article className="summary-card"><span>Ingresos</span><strong>{money(totalIncome, householdState.currency)}</strong><small>{income.length} movimientos</small><span className="summary-icon income-icon" aria-hidden="true">↗</span></article><article className="summary-card"><span>Gastos</span><strong>{money(totalExpenses, householdState.currency)}</strong><small>{expenses.length} movimientos</small><span className="summary-icon expense-icon" aria-hidden="true">↘</span></article><article className="summary-card"><span>Deuda pendiente</span><strong>{money(debtBalance, householdState.currency)}</strong><small>{debts.length} deudas registradas</small><span className="summary-icon debt-icon" aria-hidden="true">▤</span></article></div>}{renderModule()}{section === "resumen" && renderHomeBudgetSnapshot()}<footer className="page-footer"><span>Casa Clara <i>·</i> {householdState.name}</span><span>Datos privados <i>·</i> {householdState.currency}</span></footer></div></section></main>;
+  return <main className="app-shell"><aside className="sidebar"><a className="brand" href="#inicio" onClick={() => setSection("resumen")}><span className="brand-mark">c.</span><span>casa clara<small>FINANZAS DEL HOGAR</small></span></a><div className="home-switcher"><span className="home-avatar">{householdState.name.slice(0, 1).toUpperCase()}</span><span><strong>{householdState.name}</strong><small>Hogar familiar</small></span></div><span className="nav-label">ESPACIO DEL HOGAR</span><nav className="main-nav" aria-label="Navegación principal">{navigation.map((item) => <button className={section === item.id ? "nav-item active" : "nav-item"} key={item.id} onClick={() => setSection(item.id)}><span className="nav-icon" aria-hidden="true">{item.icon}</span>{item.label}{item.id === "mercado" && shoppingItems.length > 0 && <span className="nav-badge">{shoppingItems.filter((entry) => !entry.is_checked).length}</span>}</button>)}</nav><div className="sidebar-bottom"><div className="sync-status"><span className="status-dot connected" /><span><strong>Conectado a Supabase</strong><small>Datos sincronizados</small></span></div><button className="profile-button" onClick={logout}><span className="avatar avatar-dark">{(user.user_metadata.display_name ?? user.email ?? "F").slice(0, 1).toUpperCase()}</span><span><strong>{user.user_metadata.display_name ?? user.email}</strong><small>Cerrar sesión</small></span><span className="switch-chevron">↪</span></button></div></aside><section className="workspace"><header className="topbar"><div className="breadcrumb">{householdState.name} <span>/</span> <strong>{active.label}</strong></div><div className="topbar-actions">{households.length > 1 && <label className="household-select-label"><span className="sr-only">Hogar activo</span><select className="household-select" aria-label="Cambiar hogar activo" value={householdState.id} onChange={(event) => void switchHousehold(event.target.value)}>{households.map((household) => <option key={household.id} value={household.id}>{household.name}</option>)}</select></label>}<span className="currency-label">{householdState.currency}</span><button className="primary-button" onClick={() => setShowMovementForm((value) => !value)}><span aria-hidden="true">＋</span> Nuevo movimiento</button></div></header><div className="page-content"><div className="page-title"><div><span className="eyebrow">{new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long" }).format(new Date()).toLocaleUpperCase("es-CO")}</span><h1>{section === "resumen" ? "Las cuentas, claras." : active.label}</h1><p>{section === "resumen" ? `Información real de ${householdState.name}.` : `Organiza ${active.label.toLowerCase()} de tu hogar.`}</p></div><span className="connected-chip"><i /> Datos de tu hogar</span></div>{errorMessage && <div className="inline-error">{errorMessage}</div>}{showMovementForm && <section className="content-panel form-panel"><div className="panel-heading"><div><span className="eyebrow">REGISTRO FAMILIAR</span><h2>Nuevo movimiento</h2></div><button className="modal-close" aria-label="Cerrar formulario" onClick={() => setShowMovementForm(false)}>×</button></div><form className="inline-form" onSubmit={addMovement}><label>Tipo<select name="kind" value={movementKind} onChange={(event) => setMovementKind(event.target.value as "expense" | "income")}><option value="expense">Gasto</option><option value="income">Ingreso</option></select></label><label>Concepto<input name="description" required placeholder="Ej. Mercado semanal" /></label><label>Valor en COP<input name="amount" type="number" min="1" required placeholder="0" /></label><label>Categoría<select name="category" value={movementCategory} onChange={(event) => setMovementCategory(event.target.value)}>{movementCategoryOptions.map((category) => <option key={category}>{category}</option>)}</select></label><label>Persona<select name="person_id"><option value="">Sin asignar</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label>Fecha<input name="occurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label><button className="primary-button" disabled={busy}>Guardar movimiento</button></form></section>}{section === "resumen" && <div className="summary-grid"><article className="summary-card balance-card"><span>Balance registrado</span><strong>{money(totalIncome - totalExpenses, householdState.currency)}</strong><small>Ingresos menos gastos cargados</small><span className="card-sparkline" aria-hidden="true">⌁　⌁　⌁</span></article><article className="summary-card"><span>Ingresos</span><strong>{money(totalIncome, householdState.currency)}</strong><small>{income.length} movimientos</small><span className="summary-icon income-icon" aria-hidden="true">↗</span></article><article className="summary-card"><span>Gastos</span><strong>{money(totalExpenses, householdState.currency)}</strong><small>{expenses.length} movimientos</small><span className="summary-icon expense-icon" aria-hidden="true">↘</span></article><article className="summary-card"><span>Deuda pendiente</span><strong>{money(debtBalance, householdState.currency)}</strong><small>{debts.length} deudas registradas</small><span className="summary-icon debt-icon" aria-hidden="true">▤</span></article></div>}{renderModule()}{section === "resumen" && renderHomeBudgetSnapshot()}<footer className="page-footer"><span>Casa Clara <i>·</i> {householdState.name}</span><span>Datos privados <i>·</i> {householdState.currency}</span></footer></div></section></main>;
 }

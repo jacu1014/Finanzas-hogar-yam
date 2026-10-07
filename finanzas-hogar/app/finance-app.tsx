@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getSupabaseClient } from "@/app/lib/supabase";
 
-type Section = "resumen" | "movimientos" | "presupuesto" | "deudas" | "mercado" | "analisis" | "metas" | "familia";
+type Section = "resumen" | "movimientos" | "presupuesto" | "deudas" | "mercado" | "historial-mercado" | "analisis" | "metas" | "familia";
 type Person = { id: string; name: string; relationship: string; user_id: string | null };
 type Movement = {
   id: string;
@@ -49,6 +49,7 @@ const navigation: { id: Section; label: string; icon: string }[] = [
   { id: "presupuesto", label: "Presupuesto", icon: "▥" },
   { id: "deudas", label: "Deudas", icon: "▤" },
   { id: "mercado", label: "Mercado", icon: "▧" },
+  { id: "historial-mercado", label: "Historial de compras", icon: "◷" },
   { id: "analisis", label: "Análisis", icon: "⌁" },
   { id: "metas", label: "Metas", icon: "◎" },
   { id: "familia", label: "Mi familia", icon: "♧" },
@@ -806,6 +807,7 @@ export default function FinanceApp() {
 
   function renderMarket() {
     const draftTotal = purchaseLines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unit_price) || 0), 0);
+    const recentPurchases = purchases.slice(0, 10);
     const marketStores = Array.from(new Set([
       ...purchases.map((purchase) => purchase.store.trim()),
       ...shoppingItems.map((item) => item.store.trim()),
@@ -840,8 +842,8 @@ export default function FinanceApp() {
           <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">COMPARACIÓN POR PRODUCTO</span><h2>¿Subió o bajó?</h2></div></div>
             {productPriceComparisons.length ? <div className="price-comparison-list">{productPriceComparisons.map((item) => <article className="price-comparison-row" key={`${item.name}-${item.unit}`}><div><strong>{item.name}</strong><small>{item.quantity} {item.unit} · {item.store || "Tienda sin nombre"} · {shortDate(item.purchased_on)}</small></div><div className="price-comparison-current"><strong>{money(Number(item.unit_price), householdState.currency)} <small>/ {item.unit}</small></strong>{item.previous ? <span className={item.change === 0 ? "price-same" : item.change! < 0 ? "price-lower" : "price-higher"}>{item.change === 0 ? "Sin cambio" : `${item.change! < 0 ? "↓ Más económico" : "↑ Más costoso"} ${Math.abs(item.changePercent ?? 0).toFixed(1)}%`}</span> : <span className="price-first">Primera compra registrada</span>}</div><div className="price-comparison-previous"><span>Precio anterior</span><strong>{item.previous ? money(Number(item.previous.unit_price), householdState.currency) : "—"}</strong></div></article>)}</div> : <EmptyState title="Aún no hay precios para comparar" detail="Registra tu primera compra con los precios de cada producto; la siguiente compra mostrará las diferencias." />}
           </section>
-          <section className="content-panel history-panel"><div className="panel-heading"><div><span className="eyebrow">COMPRAS REGISTRADAS</span><h2>Total por compra</h2></div></div>
-            {purchases.length ? purchases.map((purchase) => <article className="history-row" key={purchase.id}><div><strong>{shortDate(purchase.purchased_on)} · {purchase.store || "Mercado"}</strong><small>{purchase.market_purchase_items.length} productos</small></div><b>{money(Number(purchase.total_amount), householdState.currency)}</b></article>) : <EmptyState title="Sin compras anteriores" detail="Cada mercado guardado aparecerá aquí con su total." />}
+          <section className="content-panel history-panel"><div className="panel-heading"><div><span className="eyebrow">COMPRAS REGISTRADAS</span><h2>Total por compra</h2></div><button className="text-button" type="button" onClick={() => setSection("historial-mercado")}>Ver todo →</button></div>
+            {recentPurchases.length ? recentPurchases.map((purchase) => <article className="history-row" key={purchase.id}><div><strong>{shortDate(purchase.purchased_on)} · {purchase.store || "Mercado"}</strong><small>{purchase.market_purchase_items.length} productos</small></div><b>{money(Number(purchase.total_amount), householdState.currency)}</b></article>) : <EmptyState title="Sin compras anteriores" detail="Cada mercado guardado aparecerá aquí con su total." />}
           </section>
         </div>
 
@@ -978,6 +980,13 @@ export default function FinanceApp() {
     if (section === "presupuesto") return renderBudget();
     if (section === "deudas") return renderDebts();
     if (section === "mercado") return renderMarket();
+    if (section === "historial-mercado") {
+      const cutoffDate = new Date(currentDate);
+      cutoffDate.setMonth(cutoffDate.getMonth() - 2);
+      const cutoffDateKey = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, "0")}-${String(cutoffDate.getDate()).padStart(2, "0")}`;
+      const recentMarketHistory = purchases.filter((purchase) => purchase.purchased_on >= cutoffDateKey);
+      return <section className="content-panel market-history-module"><div className="panel-heading"><div><span className="eyebrow">MERCADO DEL HOGAR</span><h2>Historial de compras</h2><p className="panel-description">Compras realizadas desde {shortDate(cutoffDateKey)}.</p></div><button className="quiet-button" type="button" onClick={() => setSection("mercado")}>← Volver a Mercado</button></div>{recentMarketHistory.length ? <div className="market-history-list">{recentMarketHistory.map((purchase) => <article className="market-history-entry" key={purchase.id}><div className="market-history-entry-head"><div><strong>{shortDate(purchase.purchased_on)} · {purchase.store || "Mercado"}</strong><small>{purchase.market_purchase_items.length} productos</small></div><b>{money(Number(purchase.total_amount), householdState.currency)}</b></div>{purchase.market_purchase_items.length > 0 && <ul>{purchase.market_purchase_items.map((item) => <li key={item.id}><span>{item.name}</span><small>{item.quantity} {item.unit}</small><strong>{money(Number(item.line_total), householdState.currency)}</strong></li>)}</ul>}</article>)}</div> : <EmptyState title="Sin compras en los últimos dos meses" detail="Las compras nuevas aparecerán aquí con su fecha, tienda y productos." />}</section>;
+    }
     if (section === "metas") return renderGoals();
     if (section === "analisis") {
       const categoryRank = Array.from(currentMonthExpenseCategories.entries()).sort((left, right) => right[1] - left[1]);

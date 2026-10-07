@@ -34,7 +34,7 @@ type Debt = {
 };
 type PlannedPayment = { id: string; name: string; category: string; planned_amount: number; due_day: number | null };
 type BudgetCategory = string;
-type MarketItem = { id: string; name: string; quantity: string; is_checked: boolean };
+type MarketItem = { id: string; name: string; quantity: string; store: string; is_checked: boolean };
 type PurchaseLine = { id: string; name: string; quantity: number; unit: string; unit_price: number; line_total: number };
 type Purchase = { id: string; store: string; purchased_on: string; created_at: string; total_amount: number; market_purchase_items: PurchaseLine[] };
 type PurchaseDraftLine = { key: string; name: string; quantity: string; unit: string; unit_price: string };
@@ -104,6 +104,8 @@ export default function FinanceApp() {
   const [payingDebtId, setPayingDebtId] = useState<string | null>(null);
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
   const [newMarketItem, setNewMarketItem] = useState("");
+  const [newMarketStore, setNewMarketStore] = useState("");
+  const [marketStoreFilter, setMarketStoreFilter] = useState("all");
   const [budgetDraft, setBudgetDraft] = useState({ name: "", category: "Hogar", plannedAmount: "", dueDay: "" });
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
   const [debtDraft, setDebtDraft] = useState({ name: "", creditor: "", original_amount: "", interest_rate: "", total_installments: "", installment_amount: "", payment_frequency: "monthly", next_due_date: "" });
@@ -193,7 +195,7 @@ export default function FinanceApp() {
       activeList = createdList.data;
     }
     setShoppingListId(activeList.id);
-    const itemsResult = await supabase.from("shopping_list_items").select("id, name, quantity, is_checked").eq("list_id", activeList.id).order("created_at");
+    const itemsResult = await supabase.from("shopping_list_items").select("id, name, quantity, store, is_checked").eq("list_id", activeList.id).order("created_at");
     if (itemsResult.error) setErrorMessage("No se pudieron cargar los productos de la lista.");
     else setShoppingItems((itemsResult.data ?? []) as MarketItem[]);
     finishLoading();
@@ -500,11 +502,13 @@ export default function FinanceApp() {
   async function addMarketItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !hasUser || !shoppingListId || !newMarketItem.trim()) return;
-    const result = await supabase.from("shopping_list_items").insert({ list_id: shoppingListId, created_by: user.id, name: newMarketItem.trim() }).select("id, name, quantity, is_checked").single();
+    const store = newMarketStore.trim().replace(/\s+/g, " ");
+    const result = await supabase.from("shopping_list_items").insert({ list_id: shoppingListId, created_by: user.id, name: newMarketItem.trim(), store }).select("id, name, quantity, store, is_checked").single();
     if (result.error) setErrorMessage(result.error.message);
     else {
       setShoppingItems((current) => [...current, result.data as MarketItem]);
       setNewMarketItem("");
+      setNewMarketStore("");
     }
   }
 
@@ -778,6 +782,12 @@ export default function FinanceApp() {
 
   function renderMarket() {
     const draftTotal = purchaseLines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unit_price) || 0), 0);
+    const marketStores = Array.from(new Set([
+      ...purchases.map((purchase) => purchase.store.trim()),
+      ...shoppingItems.map((item) => item.store.trim()),
+    ].filter(Boolean))).sort((left, right) => left.localeCompare(right, "es"));
+    const visibleShoppingItems = shoppingItems.filter((item) => marketStoreFilter === "all" || (marketStoreFilter === "unassigned" ? !item.store.trim() : item.store.trim().toLocaleLowerCase("es") === marketStoreFilter.toLocaleLowerCase("es")));
+    const visiblePendingCount = visibleShoppingItems.filter((item) => !item.is_checked).length;
     return (
       <div className="market-workspace">
         <section className="market-summary-grid">
@@ -811,7 +821,7 @@ export default function FinanceApp() {
           </section>
         </div>
 
-        <section className="content-panel shopping-list-panel"><div className="panel-heading"><div><span className="eyebrow">LISTA COMPARTIDA</span><h2>Próxima compra</h2></div><div className="shopping-list-actions"><span className="list-count">{shoppingItems.filter((item) => !item.is_checked).length} pendientes</span>{shoppingItems.some((item) => item.is_checked) && <button className="text-button clear-checked-button" type="button" onClick={() => void clearCheckedMarketItems()}>Limpiar comprados</button>}</div></div><form className="add-item-form" onSubmit={addMarketItem}><input aria-label="Nuevo producto" value={newMarketItem} onChange={(event) => setNewMarketItem(event.target.value)} placeholder="Añadir producto a la lista" /><button className="quiet-button" type="submit">Añadir</button></form>{shoppingItems.length ? <ul className="shopping-list">{shoppingItems.map((item) => <li key={item.id} className={item.is_checked ? "checked" : ""}><label><input type="checkbox" checked={item.is_checked} onChange={() => void toggleMarketItem(item)} /><span className="checkmark" /><strong>{item.name}</strong></label><div className="shopping-item-actions">{item.quantity && <span>{item.quantity}</span>}<button className="remove-shopping-item" type="button" aria-label={`Eliminar ${item.name} de la lista`} title="Eliminar producto" onClick={() => void removeMarketItem(item)}>×</button></div></li>)}</ul> : <EmptyState title="Lista vacía" detail="Agrega productos que necesite tu familia en la próxima compra." />}{errorMessage && <p className="error-message">{errorMessage}</p>}</section>
+        <section className="content-panel shopping-list-panel"><div className="panel-heading"><div><span className="eyebrow">LISTA COMPARTIDA</span><h2>Próxima compra</h2></div><div className="shopping-list-actions"><span className="list-count">{visiblePendingCount} pendientes</span>{shoppingItems.some((item) => item.is_checked) && <button className="text-button clear-checked-button" type="button" onClick={() => void clearCheckedMarketItems()}>Limpiar comprados</button>}</div></div><form className="add-item-form shopping-item-form" onSubmit={addMarketItem}><input aria-label="Nuevo producto" value={newMarketItem} onChange={(event) => setNewMarketItem(event.target.value)} placeholder="Añadir producto a la lista" /><input aria-label="Tienda para el producto" list="market-store-options" value={newMarketStore} onChange={(event) => setNewMarketStore(event.target.value)} placeholder="Tienda (opcional)" /><datalist id="market-store-options">{marketStores.map((store) => <option key={store} value={store} />)}</datalist><button className="quiet-button" type="submit">Añadir</button></form><div className="shopping-list-filter"><label htmlFor="shopping-store-filter">Filtrar por tienda</label><select id="shopping-store-filter" value={marketStoreFilter} onChange={(event) => setMarketStoreFilter(event.target.value)}><option value="all">Todas las tiendas</option><option value="unassigned">Sin tienda</option>{marketStores.map((store) => <option key={store} value={store}>{store}</option>)}</select></div>{visibleShoppingItems.length ? <ul className="shopping-list">{visibleShoppingItems.map((item) => <li key={item.id} className={item.is_checked ? "checked" : ""}><label><input type="checkbox" checked={item.is_checked} onChange={() => void toggleMarketItem(item)} /><span className="checkmark" /><span className="shopping-product-name"><strong>{item.name}</strong><small>{item.store || "Sin tienda"}</small></span></label><div className="shopping-item-actions">{item.quantity && <span>{item.quantity}</span>}<button className="remove-shopping-item" type="button" aria-label={`Eliminar ${item.name} de la lista`} title="Eliminar producto" onClick={() => void removeMarketItem(item)}>×</button></div></li>)}</ul> : shoppingItems.length ? <EmptyState title="No hay productos para esta tienda" detail="Cambia el filtro o asigna esta tienda al agregar un producto." /> : <EmptyState title="Lista vacía" detail="Agrega productos que necesite tu familia en la próxima compra." />}{errorMessage && <p className="error-message">{errorMessage}</p>}</section>
       </div>
     );
   }

@@ -16,7 +16,7 @@ type Movement = {
   household_people: { name: string } | { name: string }[] | null;
 };
 
-type DebtPayment = { id: string; paid_on: string; amount: number; principal_amount: number; interest_amount: number; counts_as_installment: boolean; notes: string };
+type DebtPayment = { id: string; paid_on: string; amount: number; principal_amount: number; interest_amount: number; principal_units: number; interest_units: number; uvr_value: number; counts_as_installment: boolean; notes: string };
 type Debt = {
   id: string;
   name: string;
@@ -28,6 +28,9 @@ type Debt = {
   total_installments: number | null;
   installment_amount: number | null;
   payment_frequency: "weekly" | "biweekly" | "monthly";
+  currency_unit: "COP" | "UVR";
+  opened_on: string;
+  uvr_value: number;
   due_date: string | null;
   next_due_date: string | null;
   household_debt_payments: DebtPayment[];
@@ -58,6 +61,22 @@ const defaultBudgetCategories = ["Vivienda", "Servicios", "Alimentación", "Movi
 
 function money(amount: number, currency = "COP") {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount || 0);
+}
+
+function debtMoney(amount: number, debt: Pick<Debt, "currency_unit" | "uvr_value">, currency: string) {
+  if (debt.currency_unit === "UVR") {
+    const units = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 4 }).format(amount || 0);
+    return `${units} UVR · ${money(amount * Number(debt.uvr_value), currency)}`;
+  }
+  return money(amount, currency);
+}
+
+function estimateDebtInstallment(principal: number, annualRate: number, installments: number, frequency: Debt["payment_frequency"]) {
+  if (!principal || !installments) return null;
+  const periodsPerYear = frequency === "weekly" ? 52 : frequency === "biweekly" ? 26 : 12;
+  const periodRate = Math.pow(1 + annualRate / 100, 1 / periodsPerYear) - 1;
+  if (!periodRate) return principal / installments;
+  return principal * periodRate / (1 - Math.pow(1 + periodRate, -installments));
 }
 
 function shortDate(value: string) {
@@ -115,7 +134,7 @@ export default function FinanceApp() {
   const [marketItemDraft, setMarketItemDraft] = useState({ name: "", store: "", quantity: "" });
   const [budgetDraft, setBudgetDraft] = useState({ name: "", category: "Hogar", plannedAmount: "", dueDay: "" });
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
-  const [debtDraft, setDebtDraft] = useState({ name: "", creditor: "", original_amount: "", interest_rate: "", total_installments: "", installment_amount: "", payment_frequency: "monthly", next_due_date: "" });
+  const [debtDraft, setDebtDraft] = useState({ name: "", creditor: "", original_amount: "", interest_rate: "", total_installments: "", installment_amount: "", payment_frequency: "monthly" as Debt["payment_frequency"], currency_unit: "COP" as Debt["currency_unit"], opened_on: new Date().toISOString().slice(0, 10), uvr_value: "", next_due_date: "" });
   const [newBudgetCategory, setNewBudgetCategory] = useState("");
   const [goals, setGoals] = useState<Goal[]>([
     { id: "goal-emergency", name: "Fondo de emergencia", type: "saving", target_amount: 3000000, current_amount: 1200000, due_date: "2026-12-31", description: "Reserva para imprevistos del hogar." },
@@ -170,7 +189,7 @@ export default function FinanceApp() {
     const [peopleResult, movementsResult, debtsResult, listsResult, purchasesResult, planResult, categoriesResult] = await Promise.all([
       supabase.from("household_people").select("id, name, relationship, user_id").eq("household_id", householdId).order("created_at"),
       supabase.from("transactions").select("id, description, category, amount, kind, occurred_on, person_id, household_people(name)").eq("household_id", householdId).order("occurred_on", { ascending: false }),
-      supabase.from("debts").select("id, name, creditor, original_amount, opening_balance, balance, interest_rate, total_installments, installment_amount, payment_frequency, due_date, next_due_date, household_debt_payments(id, paid_on, amount, principal_amount, interest_amount, counts_as_installment, notes)").eq("household_id", householdId).order("created_at", { ascending: false }),
+      supabase.from("debts").select("id, name, creditor, original_amount, opening_balance, balance, interest_rate, total_installments, installment_amount, payment_frequency, currency_unit, opened_on, uvr_value, due_date, next_due_date, household_debt_payments(id, paid_on, amount, principal_amount, interest_amount, principal_units, interest_units, uvr_value, counts_as_installment, notes)").eq("household_id", householdId).order("created_at", { ascending: false }),
       supabase.from("shopping_lists").select("id").eq("household_id", householdId).is("archived_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("market_purchases").select("id, store, purchased_on, created_at, total_amount, market_purchase_items(id, name, quantity, unit, unit_price, line_total)").eq("household_id", householdId).order("purchased_on", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("household_budget_items").select("id, name, category, planned_amount, due_day").eq("household_id", householdId).order("due_day", { ascending: true, nullsFirst: false }).order("created_at"),
@@ -397,6 +416,9 @@ export default function FinanceApp() {
       total_installments: "",
       installment_amount: "",
       payment_frequency: "monthly",
+      currency_unit: "COP",
+      opened_on: new Date().toISOString().slice(0, 10),
+      uvr_value: "",
       next_due_date: "",
     });
   }
@@ -411,6 +433,9 @@ export default function FinanceApp() {
       total_installments: debt.total_installments === null ? "" : String(debt.total_installments),
       installment_amount: debt.installment_amount === null ? "" : String(debt.installment_amount),
       payment_frequency: debt.payment_frequency,
+      currency_unit: debt.currency_unit,
+      opened_on: debt.opened_on,
+      uvr_value: debt.currency_unit === "UVR" ? String(debt.uvr_value) : "",
       next_due_date: debt.next_due_date ?? "",
     });
     setShowDebtForm(true);
@@ -429,7 +454,17 @@ export default function FinanceApp() {
     const interestRateValue = debtDraft.interest_rate.trim();
     const dueDate = debtDraft.next_due_date || null;
     const currentDebt = editingDebtId ? debts.find((entry) => entry.id === editingDebtId) : null;
-    const paidPrincipal = currentDebt ? currentDebt.household_debt_payments.reduce((sum, payment) => sum + Number(payment.principal_amount), 0) : 0;
+    if (debtDraft.currency_unit === "UVR" && Number(debtDraft.uvr_value) <= 0) {
+      setErrorMessage("Ingresa el valor en pesos de una UVR para poder mostrar el saldo equivalente.");
+      return;
+    }
+    if (currentDebt?.currency_unit !== debtDraft.currency_unit && currentDebt?.household_debt_payments.length) {
+      setErrorMessage("No se puede cambiar COP/UVR cuando ya existen pagos registrados.");
+      return;
+    }
+    const paidPrincipal = currentDebt
+      ? Math.max(Number(currentDebt.original_amount) - Number(currentDebt.opening_balance), 0) + currentDebt.household_debt_payments.reduce((sum, payment) => sum + Number(payment.principal_units), 0)
+      : 0;
     const nextBalance = currentDebt ? Math.max(Number(amount) - paidPrincipal, 0) : amount;
     const payload = {
       household_id: householdState.id,
@@ -443,6 +478,9 @@ export default function FinanceApp() {
       total_installments: installments,
       installment_amount: installmentAmount,
       payment_frequency: debtDraft.payment_frequency,
+      currency_unit: debtDraft.currency_unit,
+      opened_on: debtDraft.opened_on,
+      uvr_value: debtDraft.currency_unit === "UVR" ? Number(debtDraft.uvr_value) : 1,
       due_date: dueDate,
       next_due_date: dueDate,
     };
@@ -483,9 +521,11 @@ export default function FinanceApp() {
     if (!supabase || !hasUser) return;
     const form = new FormData(event.currentTarget);
     const amount = Number(form.get("amount"));
-    const interest = Number(form.get("interest_amount")) || 0;
-    if (!amount || amount <= 0 || interest < 0 || interest > amount) {
-      setErrorMessage("Revisa el valor pagado y que el interés no supere el pago total.");
+    const interestValue = String(form.get("interest_amount") ?? "").trim();
+    const interest = interestValue ? Number(interestValue) : null;
+    const uvrValue = debt.currency_unit === "UVR" ? Number(form.get("uvr_value")) : null;
+    if (!amount || amount <= 0 || (interest !== null && (interest < 0 || interest > amount)) || (debt.currency_unit === "UVR" && (!uvrValue || uvrValue <= 0))) {
+      setErrorMessage("Revisa el total, el interés informado y el valor UVR del día del pago.");
       return;
     }
     setBusy(true);
@@ -497,6 +537,7 @@ export default function FinanceApp() {
       interest_paid: interest,
       is_installment: form.get("counts_as_installment") === "on",
       payment_notes: String(form.get("notes") || "").trim(),
+      payment_uvr_value: uvrValue,
     });
     if (error) setErrorMessage(error.message);
     else {
@@ -738,7 +779,7 @@ export default function FinanceApp() {
   const income = movements.filter((movement) => movement.kind === "income");
   const totalExpenses = expenses.reduce((sum, movement) => sum + Number(movement.amount), 0);
   const totalIncome = income.reduce((sum, movement) => sum + Number(movement.amount), 0);
-  const debtBalance = debts.reduce((sum, debt) => sum + Number(debt.balance), 0);
+  const debtBalance = debts.reduce((sum, debt) => sum + Number(debt.balance) * (debt.currency_unit === "UVR" ? Number(debt.uvr_value) : 1), 0);
   const currentDate = new Date();
   const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
   const periodIncomeMovements = income.filter((movement) => movement.occurred_on.startsWith(selectedPeriod));
@@ -925,12 +966,16 @@ export default function FinanceApp() {
         {showDebtForm && <form className="debt-create-form" onSubmit={saveDebt}>
           <label>Nombre de la deuda<input value={debtDraft.name} onChange={(event) => setDebtDraft((current) => ({ ...current, name: event.target.value }))} required placeholder="Ej. Crédito de vehículo" /></label>
           <label>Acreedor<input value={debtDraft.creditor} onChange={(event) => setDebtDraft((current) => ({ ...current, creditor: event.target.value }))} placeholder="Banco o entidad" /></label>
-          <label>Monto original<input value={debtDraft.original_amount} onChange={(event) => setDebtDraft((current) => ({ ...current, original_amount: event.target.value }))} type="number" min="1" step="1" required placeholder="COP" /></label>
-          <label>Tasa anual (%)<input value={debtDraft.interest_rate} onChange={(event) => setDebtDraft((current) => ({ ...current, interest_rate: event.target.value }))} type="number" min="0" step="0.01" placeholder="0" /></label>
+          <label>Unidad de la deuda<select value={debtDraft.currency_unit} disabled={Boolean(editingDebtId && debts.find((debt) => debt.id === editingDebtId)?.household_debt_payments.length)} onChange={(event) => setDebtDraft((current) => ({ ...current, currency_unit: event.target.value as Debt["currency_unit"] }))}><option value="COP">Pesos (COP)</option><option value="UVR">UVR</option></select></label>
+          <label>Monto original ({debtDraft.currency_unit})<input value={debtDraft.original_amount} onChange={(event) => setDebtDraft((current) => ({ ...current, original_amount: event.target.value }))} type="number" min="0.000001" step={debtDraft.currency_unit === "UVR" ? "0.000001" : "1"} required placeholder={debtDraft.currency_unit} /></label>
+          {debtDraft.currency_unit === "UVR" && <label>Valor UVR actual en pesos<input value={debtDraft.uvr_value} onChange={(event) => setDebtDraft((current) => ({ ...current, uvr_value: event.target.value }))} type="number" min="0.000001" step="0.000001" required placeholder="Valor publicado por el Banco de la República" /></label>}
+          <label>{debtDraft.currency_unit === "UVR" ? "Tasa real anual E.A. (%)" : "Tasa anual efectiva (%)"}<input value={debtDraft.interest_rate} onChange={(event) => setDebtDraft((current) => ({ ...current, interest_rate: event.target.value }))} type="number" min="0" step="0.01" placeholder="0 si no genera intereses" /></label>
           <label>Número de cuotas<input value={debtDraft.total_installments} onChange={(event) => setDebtDraft((current) => ({ ...current, total_installments: event.target.value }))} type="number" min="1" step="1" placeholder="Opcional" /></label>
-          <label>Valor por cuota<input value={debtDraft.installment_amount} onChange={(event) => setDebtDraft((current) => ({ ...current, installment_amount: event.target.value }))} type="number" min="1" step="1" placeholder="Opcional" /></label>
-          <label>Frecuencia<select value={debtDraft.payment_frequency} onChange={(event) => setDebtDraft((current) => ({ ...current, payment_frequency: event.target.value }))}><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select></label>
+          <label>Cuota informada ({debtDraft.currency_unit})<input value={debtDraft.installment_amount} onChange={(event) => setDebtDraft((current) => ({ ...current, installment_amount: event.target.value }))} type="number" min="0.000001" step={debtDraft.currency_unit === "UVR" ? "0.000001" : "1"} placeholder="Opcional" /></label>
+          <label>Frecuencia<select value={debtDraft.payment_frequency} onChange={(event) => setDebtDraft((current) => ({ ...current, payment_frequency: event.target.value as Debt["payment_frequency"] }))}><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select></label>
+          <label>Fecha de desembolso<input value={debtDraft.opened_on} onChange={(event) => setDebtDraft((current) => ({ ...current, opened_on: event.target.value }))} type="date" required /></label>
           <label>Primer vencimiento<input value={debtDraft.next_due_date} onChange={(event) => setDebtDraft((current) => ({ ...current, next_due_date: event.target.value }))} type="date" /></label>
+          {!debtDraft.installment_amount && debtDraft.total_installments && <p className="debt-estimate">Cuota estimada: {new Intl.NumberFormat("es-CO", { maximumFractionDigits: 2 }).format((estimateDebtInstallment(Number(debtDraft.original_amount), Number(debtDraft.interest_rate) || 0, Number(debtDraft.total_installments), debtDraft.payment_frequency) ?? 0) * (debtDraft.currency_unit === "UVR" ? Number(debtDraft.uvr_value) || 0 : 1))} {debtDraft.currency_unit === "UVR" ? "COP aprox. por período" : "COP por período"}. Sin seguros ni cargos; interés calculado con base E.A./365.</p>}
           <div className="debt-form-actions">
             <button className="primary-button debt-create-submit" type="submit" disabled={busy}>{busy ? "Guardando…" : editingDebtId ? "Actualizar deuda" : "Guardar deuda"}</button>
             {editingDebtId && <button className="text-button" type="button" onClick={() => { setShowDebtForm(false); resetDebtDraft(); }}>Cancelar</button>}
@@ -942,16 +987,17 @@ export default function FinanceApp() {
         const payments = [...debt.household_debt_payments].sort((left, right) => right.paid_on.localeCompare(left.paid_on));
         const installmentsPaid = payments.filter((payment) => payment.counts_as_installment).length;
         const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-        const principalPaid = Math.max(Number(debt.original_amount) - Number(debt.opening_balance), 0) + payments.reduce((sum, payment) => sum + Number(payment.principal_amount), 0);
+        const principalPaid = Math.max(Number(debt.original_amount) - Number(debt.opening_balance), 0) + payments.reduce((sum, payment) => sum + Number(payment.principal_units), 0);
         const principalProgress = Number(debt.original_amount) > 0 ? Math.min(principalPaid / Number(debt.original_amount) * 100, 100) : 0;
         const overdue = debt.balance > 0 && debt.next_due_date !== null && debt.next_due_date < today;
+        const estimatedInstallment = debt.installment_amount ?? estimateDebtInstallment(Number(debt.balance), Number(debt.interest_rate ?? 0), Math.max(Number(debt.total_installments ?? 0) - installmentsPaid, 0), debt.payment_frequency);
         return <article className="content-panel debt-card" key={debt.id}>
           <div className="debt-card-heading"><div><span className="eyebrow">{debt.creditor || "ACREEDOR NO INDICADO"}</span><h2>{debt.name}</h2></div><div className="debt-card-actions"><button className="text-button" type="button" onClick={() => editDebt(debt)}>Editar</button><button className="remove-shopping-item" type="button" aria-label={`Eliminar ${debt.name}`} title="Eliminar deuda" onClick={() => void deleteDebt(debt.id)}>×</button><span className={`debt-status ${debt.balance <= 0 ? "paid" : overdue ? "overdue" : "active"}`}>{debt.balance <= 0 ? "Pagada" : overdue ? "Vencida" : "Activa"}</span></div></div>
-          <div className="debt-metrics"><div><span>Saldo pendiente</span><strong>{money(Number(debt.balance), householdState.currency)}</strong></div><div><span>Monto original</span><strong>{money(Number(debt.original_amount), householdState.currency)}</strong></div><div><span>Tasa anual</span><strong>{debt.interest_rate === null ? "No indicada" : `${Number(debt.interest_rate).toFixed(2)}%`}</strong></div><div><span>Próximo vencimiento</span><strong>{debt.next_due_date ? shortDate(debt.next_due_date) : "No indicado"}</strong></div></div>
+          <div className="debt-metrics"><div><span>Saldo pendiente · {debt.currency_unit}</span><strong>{debtMoney(Number(debt.balance), debt, householdState.currency)}</strong></div><div><span>Monto original · {debt.currency_unit}</span><strong>{debtMoney(Number(debt.original_amount), debt, householdState.currency)}</strong></div><div><span>Tasa real anual E.A.</span><strong>{debt.interest_rate === null ? "0% · sin interés" : `${Number(debt.interest_rate).toFixed(2)}%`}</strong></div><div><span>Próximo vencimiento</span><strong>{debt.next_due_date ? shortDate(debt.next_due_date) : "No indicado"}</strong></div></div>
           <div className="debt-progress"><div><span>Capital pagado · {principalProgress.toFixed(1)}%</span><strong>{debt.total_installments ? `${installmentsPaid} de ${debt.total_installments} cuotas` : `${installmentsPaid} cuotas registradas`}</strong></div><div className="progress-track"><i style={{ width: `${principalProgress}%` }} /></div></div>
-          <div className="debt-card-footer"><span>Pagado en total <strong>{money(totalPaid, householdState.currency)}</strong>{debt.installment_amount ? <small> · Cuota esperada {money(Number(debt.installment_amount), householdState.currency)} {debt.payment_frequency === "monthly" ? "mensual" : debt.payment_frequency === "biweekly" ? "quincenal" : "semanal"}</small> : null}</span><button className="primary-button" type="button" disabled={Number(debt.balance) <= 0} onClick={() => setPayingDebtId((current) => current === debt.id ? null : debt.id)}>{payingDebtId === debt.id ? "Cerrar" : "＋ Registrar pago"}</button></div>
-          {payingDebtId === debt.id && <form className="debt-payment-form" onSubmit={(event) => void recordDebtPayment(event, debt)}><label>Fecha del pago<input name="paid_on" type="date" defaultValue={today} required /></label><label>Total pagado<input name="amount" type="number" min="1" step="1" defaultValue={debt.installment_amount ?? ""} required placeholder="COP" /></label><label>Interés incluido<input name="interest_amount" type="number" min="0" step="1" defaultValue="0" /><small>Consulta el recibo para separar interés y capital.</small></label><label className="installment-check"><input name="counts_as_installment" type="checkbox" defaultChecked /><span>Cuenta como cuota pagada</span></label><label className="payment-note-label">Nota<input name="notes" placeholder="Opcional" /></label><button className="primary-button" type="submit" disabled={busy}>{busy ? "Guardando…" : "Guardar pago"}</button></form>}
-          {payments.length > 0 && <details className="debt-history"><summary>Historial de pagos ({payments.length})</summary><div className="debt-payment-list">{payments.map((payment) => <div className="debt-payment-row" key={payment.id}><span>{shortDate(payment.paid_on)}{payment.counts_as_installment ? " · Cuota" : " · Abono"}{payment.notes ? ` · ${payment.notes}` : ""}</span><span>Capital {money(Number(payment.principal_amount), householdState.currency)}{Number(payment.interest_amount) > 0 ? ` · Interés ${money(Number(payment.interest_amount), householdState.currency)}` : ""}</span><strong>{money(Number(payment.amount), householdState.currency)}</strong></div>)}</div></details>}
+          <div className="debt-card-footer"><span>Pagado en total <strong>{money(totalPaid, householdState.currency)}</strong>{estimatedInstallment ? <small> · Cuota estimada {debtMoney(Number(estimatedInstallment), debt, householdState.currency)} {debt.payment_frequency === "monthly" ? "mensual" : debt.payment_frequency === "biweekly" ? "quincenal" : "semanal"}</small> : null}</span><button className="primary-button" type="button" disabled={Number(debt.balance) <= 0} onClick={() => setPayingDebtId((current) => current === debt.id ? null : debt.id)}>{payingDebtId === debt.id ? "Cerrar" : "＋ Registrar pago"}</button></div>
+          {payingDebtId === debt.id && <form className="debt-payment-form" onSubmit={(event) => void recordDebtPayment(event, debt)}><label>Fecha del pago<input name="paid_on" type="date" defaultValue={today} required /></label>{debt.currency_unit === "UVR" && <label>Valor UVR en pesos para esta fecha<input name="uvr_value" type="number" min="0.000001" step="0.000001" defaultValue={debt.uvr_value} required /><small>Usa el valor publicado para la fecha del pago.</small></label>}<label>Total pagado en pesos<input name="amount" type="number" min="1" step="1" defaultValue={debt.installment_amount ? Math.round(Number(debt.installment_amount) * (debt.currency_unit === "UVR" ? Number(debt.uvr_value) : 1)) : undefined} required placeholder="COP" /></label><label>Interés cobrado (opcional)<input name="interest_amount" type="number" min="0" step="1" placeholder="Automático según E.A./365" /><small>Déjalo vacío para estimarlo; escribe el del extracto si necesitas conciliar.</small></label><label className="installment-check"><input name="counts_as_installment" type="checkbox" defaultChecked /><span>Es cuota programada (desmarca para abono extraordinario a capital)</span></label><label className="payment-note-label">Nota<input name="notes" placeholder="Opcional" /></label><button className="primary-button" type="submit" disabled={busy}>{busy ? "Calculando…" : "Guardar pago"}</button></form>}
+          {payments.length > 0 && <details className="debt-history"><summary>Historial de pagos ({payments.length})</summary><div className="debt-payment-list">{payments.map((payment) => <div className="debt-payment-row" key={payment.id}><span>{shortDate(payment.paid_on)}{payment.counts_as_installment ? " · Cuota" : " · Abono a capital"}{payment.notes ? ` · ${payment.notes}` : ""}</span><span>Capital {debt.currency_unit === "UVR" ? `${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 2 }).format(Number(payment.principal_units))} UVR · ` : ""}{money(Number(payment.principal_amount), householdState.currency)}{Number(payment.interest_amount) > 0 ? ` · Interés ${money(Number(payment.interest_amount), householdState.currency)}` : ""}</span><strong>{money(Number(payment.amount), householdState.currency)}</strong></div>)}</div></details>}
         </article>;
       }) : <section className="content-panel"><EmptyState title="No hay deudas registradas" detail="Agrega el monto, tasa, número de cuotas y fecha de vencimiento para empezar el seguimiento." /></section>}</section>
     </div>;

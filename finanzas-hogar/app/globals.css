@@ -426,6 +426,16 @@ body {
   .budget-overview-card.over-budget { border-color: #f0ddd5; background: #fcf5f1; }
   .budget-overview-card.over-budget > strong { color: #b45f49; }
   .budget-overview-card.under-budget > strong { color: #397652; }
+  .category-management-panel { display: grid; gap: 14px; }
+  .category-management-panel .panel-heading { margin-bottom: 0; }
+  .category-name-list { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+  .category-name-chip { display: inline-flex; max-width: 100%; align-items: center; min-height: 34px; padding: 7px 11px; border: 1px solid #dfe7dc; border-radius: 6px; background: #f7faf5; color: #3f5744; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+  .add-budget-category-form { display: grid; gap: 7px; padding-top: 13px; border-top: 1px solid var(--line); }
+  .add-budget-category-form > label { color: #566357; font-size: 10px; font-weight: 600; }
+  .add-budget-category-form > div { display: flex; gap: 8px; }
+  .add-budget-category-form input { width: 100%; min-width: 0; min-height: 37px; padding: 0 10px; border: 1px solid #e3e8e1; border-radius: 5px; background: #fff; color: var(--foreground); font: inherit; font-size: 10px; }
+  .add-budget-category-form .quiet-button { flex: 0 0 auto; }
+  .add-budget-category-form > small { color: #899188; font-size: 9px; line-height: 1.5; }
   .budget-plan-panel .panel-heading, .budget-comparison-panel .panel-heading { margin-bottom: 15px; }
   .planned-payment-form { grid-template-columns: minmax(150px, 1.5fr) minmax(125px, 1fr) minmax(120px, .9fr) minmax(90px, .6fr) auto; align-items: end; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
   .planned-payment-form label { display: grid; min-width: 0; gap: 6px; color: #69736a; font-size: 9px; }
@@ -477,6 +487,7 @@ body {
   .debt-create-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 11px; }
   .debt-create-form label, .debt-payment-form label { display: grid; min-width: 0; gap: 6px; color: #69736a; font-size: 9px; }
   .debt-create-form input, .debt-create-form select, .debt-payment-form input { width: 100%; min-width: 0; min-height: 36px; padding: 0 9px; border: 1px solid #e3e8e1; border-radius: 5px; background: #fff; color: var(--foreground); font: inherit; font-size: 10px; }
+  .debt-estimate { grid-column: 1 / -1; margin: 0; color: #6e7b70; font-size: 9px; line-height: 1.5; }
   .debt-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; grid-column: 4; }
   .debt-create-submit { min-height: 36px; }
   .debt-card-list { display: grid; gap: 13px; }

@@ -106,6 +106,8 @@ export default function FinanceApp() {
   const [newMarketItem, setNewMarketItem] = useState("");
   const [newMarketStore, setNewMarketStore] = useState("");
   const [marketStoreFilter, setMarketStoreFilter] = useState("all");
+  const [editingMarketItemId, setEditingMarketItemId] = useState<string | null>(null);
+  const [marketItemDraft, setMarketItemDraft] = useState({ name: "", store: "", quantity: "" });
   const [budgetDraft, setBudgetDraft] = useState({ name: "", category: "Hogar", plannedAmount: "", dueDay: "" });
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
   const [debtDraft, setDebtDraft] = useState({ name: "", creditor: "", original_amount: "", interest_rate: "", total_installments: "", installment_amount: "", payment_frequency: "monthly", next_due_date: "" });
@@ -519,6 +521,28 @@ export default function FinanceApp() {
     else setShoppingItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_checked: !item.is_checked } : entry));
   }
 
+  function editMarketItem(item: MarketItem) {
+    setEditingMarketItemId(item.id);
+    setMarketItemDraft({ name: item.name, store: item.store, quantity: item.quantity });
+  }
+
+  async function saveMarketItem(event: FormEvent<HTMLFormElement>, item: MarketItem) {
+    event.preventDefault();
+    if (!supabase) return;
+    const name = marketItemDraft.name.trim();
+    if (!name) return;
+    const store = marketItemDraft.store.trim().replace(/\s+/g, " ");
+    const quantity = marketItemDraft.quantity.trim();
+    const result = await supabase.from("shopping_list_items").update({ name, store, quantity }).eq("id", item.id).select("id, name, quantity, store, is_checked").single();
+    if (result.error) setErrorMessage(result.error.message);
+    else {
+      setShoppingItems((current) => current.map((entry) => entry.id === item.id ? result.data as MarketItem : entry));
+      setEditingMarketItemId(null);
+      setMarketItemDraft({ name: "", store: "", quantity: "" });
+      setErrorMessage("");
+    }
+  }
+
   async function removeMarketItem(item: MarketItem) {
     if (!supabase) return;
     const result = await supabase.from("shopping_list_items").delete().eq("id", item.id);
@@ -821,7 +845,7 @@ export default function FinanceApp() {
           </section>
         </div>
 
-        <section className="content-panel shopping-list-panel"><div className="panel-heading"><div><span className="eyebrow">LISTA COMPARTIDA</span><h2>Próxima compra</h2></div><div className="shopping-list-actions"><span className="list-count">{visiblePendingCount} pendientes</span>{shoppingItems.some((item) => item.is_checked) && <button className="text-button clear-checked-button" type="button" onClick={() => void clearCheckedMarketItems()}>Limpiar comprados</button>}</div></div><form className="add-item-form shopping-item-form" onSubmit={addMarketItem}><input aria-label="Nuevo producto" value={newMarketItem} onChange={(event) => setNewMarketItem(event.target.value)} placeholder="Añadir producto a la lista" /><input aria-label="Tienda para el producto" list="market-store-options" value={newMarketStore} onChange={(event) => setNewMarketStore(event.target.value)} placeholder="Tienda (opcional)" /><datalist id="market-store-options">{marketStores.map((store) => <option key={store} value={store} />)}</datalist><button className="quiet-button" type="submit">Añadir</button></form><div className="shopping-list-filter"><label htmlFor="shopping-store-filter">Filtrar por tienda</label><select id="shopping-store-filter" value={marketStoreFilter} onChange={(event) => setMarketStoreFilter(event.target.value)}><option value="all">Todas las tiendas</option><option value="unassigned">Sin tienda</option>{marketStores.map((store) => <option key={store} value={store}>{store}</option>)}</select></div>{visibleShoppingItems.length ? <ul className="shopping-list">{visibleShoppingItems.map((item) => <li key={item.id} className={item.is_checked ? "checked" : ""}><label><input type="checkbox" checked={item.is_checked} onChange={() => void toggleMarketItem(item)} /><span className="checkmark" /><span className="shopping-product-name"><strong>{item.name}</strong><small>{item.store || "Sin tienda"}</small></span></label><div className="shopping-item-actions">{item.quantity && <span>{item.quantity}</span>}<button className="remove-shopping-item" type="button" aria-label={`Eliminar ${item.name} de la lista`} title="Eliminar producto" onClick={() => void removeMarketItem(item)}>×</button></div></li>)}</ul> : shoppingItems.length ? <EmptyState title="No hay productos para esta tienda" detail="Cambia el filtro o asigna esta tienda al agregar un producto." /> : <EmptyState title="Lista vacía" detail="Agrega productos que necesite tu familia en la próxima compra." />}{errorMessage && <p className="error-message">{errorMessage}</p>}</section>
+        <section className="content-panel shopping-list-panel"><div className="panel-heading"><div><span className="eyebrow">LISTA COMPARTIDA</span><h2>Próxima compra</h2></div><div className="shopping-list-actions"><span className="list-count">{visiblePendingCount} pendientes</span>{shoppingItems.some((item) => item.is_checked) && <button className="text-button clear-checked-button" type="button" onClick={() => void clearCheckedMarketItems()}>Limpiar comprados</button>}</div></div><form className="add-item-form shopping-item-form" onSubmit={addMarketItem}><input aria-label="Nuevo producto" value={newMarketItem} onChange={(event) => setNewMarketItem(event.target.value)} placeholder="Añadir producto a la lista" /><input aria-label="Tienda para el producto" list="market-store-options" value={newMarketStore} onChange={(event) => setNewMarketStore(event.target.value)} placeholder="Tienda (opcional)" /><datalist id="market-store-options">{marketStores.map((store) => <option key={store} value={store} />)}</datalist><button className="quiet-button" type="submit">Añadir</button></form><div className="shopping-list-filter"><label htmlFor="shopping-store-filter">Filtrar por tienda</label><select id="shopping-store-filter" value={marketStoreFilter} onChange={(event) => setMarketStoreFilter(event.target.value)}><option value="all">Todas las tiendas</option><option value="unassigned">Sin tienda</option>{marketStores.map((store) => <option key={store} value={store}>{store}</option>)}</select></div>{visibleShoppingItems.length ? <ul className="shopping-list">{visibleShoppingItems.map((item) => <li key={item.id} className={item.is_checked ? "checked" : ""}>{editingMarketItemId === item.id ? <form className="shopping-edit-form" onSubmit={(event) => void saveMarketItem(event, item)}><input aria-label="Nombre del producto" value={marketItemDraft.name} onChange={(event) => setMarketItemDraft((current) => ({ ...current, name: event.target.value }))} required /><input aria-label="Tienda del producto" list="market-store-options" value={marketItemDraft.store} onChange={(event) => setMarketItemDraft((current) => ({ ...current, store: event.target.value }))} placeholder="Tienda" /><input aria-label="Cantidad" value={marketItemDraft.quantity} onChange={(event) => setMarketItemDraft((current) => ({ ...current, quantity: event.target.value }))} placeholder="Cantidad" /><button className="text-button" type="submit">Guardar</button><button className="text-button" type="button" onClick={() => setEditingMarketItemId(null)}>Cancelar</button></form> : <><label><input type="checkbox" checked={item.is_checked} onChange={() => void toggleMarketItem(item)} /><span className="checkmark" /><span className="shopping-product-name"><strong>{item.name}</strong><small>{item.store || "Sin tienda"}</small></span></label><div className="shopping-item-actions">{item.quantity && <span>{item.quantity}</span>}<button className="text-button" type="button" aria-label={`Editar ${item.name}`} title="Editar producto" onClick={() => editMarketItem(item)}>Editar</button><button className="remove-shopping-item" type="button" aria-label={`Eliminar ${item.name} de la lista`} title="Eliminar producto" onClick={() => void removeMarketItem(item)}>×</button></div></>}</li>)}</ul> : shoppingItems.length ? <EmptyState title="No hay productos para esta tienda" detail="Cambia el filtro o asigna esta tienda al agregar un producto." /> : <EmptyState title="Lista vacía" detail="Agrega productos que necesite tu familia en la próxima compra." />}{errorMessage && <p className="error-message">{errorMessage}</p>}</section>
       </div>
     );
   }

@@ -77,6 +77,10 @@ export default function FinanceApp() {
   const [user, setUser] = useState<AuthUser>({ id: "", user_metadata: {} });
   const [hasUser, setHasUser] = useState(false);
   const [section, setSection] = useState<Section>("resumen");
+  const [selectedPeriod, setSelectedPeriod] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authMessage, setAuthMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -735,7 +739,14 @@ export default function FinanceApp() {
   const totalExpenses = expenses.reduce((sum, movement) => sum + Number(movement.amount), 0);
   const totalIncome = income.reduce((sum, movement) => sum + Number(movement.amount), 0);
   const debtBalance = debts.reduce((sum, debt) => sum + Number(debt.balance), 0);
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentDate = new Date();
+  const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+  const periodIncomeMovements = income.filter((movement) => movement.occurred_on.startsWith(selectedPeriod));
+  const periodExpenseMovements = expenses.filter((movement) => movement.occurred_on.startsWith(selectedPeriod));
+  const periodIncome = periodIncomeMovements.reduce((sum, movement) => sum + Number(movement.amount), 0);
+  const periodExpenses = periodExpenseMovements.reduce((sum, movement) => sum + Number(movement.amount), 0);
+  const periodDebtPayments = debts.reduce((sum, debt) => sum + debt.household_debt_payments.filter((payment) => payment.paid_on.startsWith(selectedPeriod)).reduce((debtSum, payment) => debtSum + Number(payment.amount), 0), 0);
+  const selectedPeriodLabel = new Intl.DateTimeFormat("es-CO", { month: "long", year: "numeric" }).format(new Date(`${selectedPeriod}-01T12:00:00`));
   const currentExpenses = expenses.filter((movement) => movement.occurred_on.startsWith(currentMonth)).reduce((sum, movement) => sum + Number(movement.amount), 0);
   const plannedTotal = plannedPayments.reduce((sum, payment) => sum + Number(payment.planned_amount), 0);
   const budgetDifference = currentExpenses - plannedTotal;
@@ -745,7 +756,6 @@ export default function FinanceApp() {
   const plannedByCategory = plannedPayments.reduce((totals, payment) => totals.set(payment.category, (totals.get(payment.category) ?? 0) + Number(payment.planned_amount)), new Map<string, number>());
   const comparisonCategories = Array.from(new Set([...plannedByCategory.keys(), ...actualExpensesByCategory.keys()]));
   const filteredMovements = movements.filter((movement) => `${movement.description} ${movement.category} ${personName(movement)}`.toLowerCase().includes(query.toLowerCase()));
-  const currentDate = new Date();
   const currentMarketMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
   const priorMarketMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
   const priorMonthKey = `${priorMarketMonthDate.getFullYear()}-${String(priorMarketMonthDate.getMonth() + 1).padStart(2, "0")}`;
@@ -976,6 +986,7 @@ export default function FinanceApp() {
   }
 
   function renderModule() {
+    if (section === "resumen") return <div className="dashboard-grid"><section className="content-panel period-summary-panel"><div className="panel-heading"><div><span className="eyebrow">RESUMEN DEL HOGAR</span><h2>{selectedPeriodLabel}</h2></div><label className="period-picker"><span>Período</span><input aria-label="Seleccionar período" type="month" value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value)} /></label></div><div className="period-summary-grid"><article className="summary-card balance-card"><span>Balance del período</span><strong>{money(periodIncome - periodExpenses, householdState.currency)}</strong><small>Ingresos menos gastos de {selectedPeriodLabel}</small></article><article className="summary-card"><span>Ingresos</span><strong>{money(periodIncome, householdState.currency)}</strong><small>{periodIncomeMovements.length} movimientos en el período</small><span className="summary-icon income-icon" aria-hidden="true">↗</span></article><article className="summary-card"><span>Gastos</span><strong>{money(periodExpenses, householdState.currency)}</strong><small>{periodExpenseMovements.length} movimientos en el período</small><span className="summary-icon expense-icon" aria-hidden="true">↘</span></article><article className="summary-card"><span>Deuda pendiente actual</span><strong>{money(debtBalance, householdState.currency)}</strong><small>{money(periodDebtPayments, householdState.currency)} abonados durante el período</small><span className="summary-icon debt-icon" aria-hidden="true">▤</span></article></div><p className="period-summary-note">Ingresos, gastos y balance corresponden al período seleccionado. La deuda pendiente es el saldo vigente a hoy.</p></section><section className="content-panel recent-panel"><div className="panel-heading"><div><span className="eyebrow">ACTIVIDAD RECIENTE</span><h2>Últimos movimientos</h2></div><button className="text-button" onClick={() => setSection("movimientos")}>Ver todos <span aria-hidden="true">→</span></button></div>{renderTransactions(movements.slice(0, 5))}</section><section className="content-panel household-panel"><div className="panel-heading"><div><span className="eyebrow">INGRESOS POR PERSONA</span><h2>Aportes del hogar</h2></div><button className="more-button" aria-label="Ver familia" onClick={() => setSection("familia")}>···</button></div>{people.length ? people.map((person) => <div className="person-row" key={person.id}><span className="avatar avatar-green">{person.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span><div><strong>{person.name}</strong><small>{person.relationship}</small></div><b>{money(periodIncomeMovements.filter((movement) => movement.person_id === person.id).reduce((sum, movement) => sum + Number(movement.amount), 0), householdState.currency)}</b></div>) : <EmptyState title="Agrega a tu familia" detail="Completa los perfiles desde Mi familia." />}<div className="household-total"><span>Ingresos del período</span><strong>{money(periodIncome, householdState.currency)}</strong></div></section></div>;
     if (section === "movimientos") return <section className="content-panel"><div className="panel-heading"><div><span className="eyebrow">REGISTRO DEL HOGAR</span><h2>Movimientos</h2></div><label className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar movimiento" /></label></div>{renderTransactions(filteredMovements)}</section>;
     if (section === "presupuesto") return renderBudget();
     if (section === "deudas") return renderDebts();

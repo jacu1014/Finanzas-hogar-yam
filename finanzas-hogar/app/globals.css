@@ -83,6 +83,13 @@ body {
 .demo-chip { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 6px; padding: 7px 10px; border: 1px solid #e8e7df; border-radius: 20px; background: #fbfaf5; color: #77746a; font-size: 10px; }
 .demo-chip i { width: 6px; height: 6px; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 17px; }
+.summary-grid:not(.period-summary-grid) { display: none; }
+.period-summary-panel { grid-column: 1 / -1; display: grid; gap: 15px; }
+.period-summary-panel .panel-heading { align-items: center; }
+.period-picker { display: grid; gap: 5px; color: #758075; font-size: 9px; }
+.period-picker input { min-height: 34px; padding: 0 8px; border: 1px solid #e3e8e1; border-radius: 5px; background: #fff; color: var(--foreground); font: inherit; font-size: 10px; }
+.period-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
+.period-summary-note { margin: -2px 0 0; color: #7a857b; font-size: 9px; }
 .summary-card { position: relative; min-height: 127px; overflow: hidden; padding: 17px 17px 14px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
 .summary-card > span:first-child { display: block; color: #737d74; font-size: 11px; }
 .summary-card > strong { display: block; margin: 13px 0 7px; font: 600 21px/1 Georgia, serif; letter-spacing: 0; }
@@ -249,6 +256,7 @@ body {
   .topbar { padding: 0 24px; }
   .page-content { padding: 28px 24px 18px; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .period-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid { grid-template-columns: minmax(0, 1.3fr) minmax(250px, 1fr); }
 }
 @media (max-width: 780px) {
@@ -270,6 +278,7 @@ body {
   .page-title h1 { font-size: 27px; }
   .dashboard-grid, .market-layout, .analysis-grid { grid-template-columns: 1fr; }
   .summary-grid { gap: 9px; }
+  .period-summary-grid { gap: 9px; }
   .summary-card { min-height: 115px; padding: 14px; }
   .summary-card > strong { font-size: 18px; }
   .summary-card > small { font-size: 9px; }
@@ -283,6 +292,7 @@ body {
   .page-title { gap: 8px; }
   .demo-chip { flex: 0 0 auto; font-size: 9px; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .period-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-card > strong, .balance-card > strong { font-size: 16px; }
   .summary-card > span:first-child { font-size: 10px; }
   .movement-table td { padding-right: 6px; padding-left: 6px; }

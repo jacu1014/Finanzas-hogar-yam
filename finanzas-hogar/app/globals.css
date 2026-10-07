@@ -647,3 +647,80 @@ body {
   .shopping-list-filter { align-items: flex-start; flex-direction: column; gap: 6px; }
   .shopping-list-filter select { width: 100%; }
 }
+
+.analysis-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.analysis-header h2 { margin: 5px 0 0; color: #303a31; font: 600 22px Georgia, serif; }
+.analysis-header p { margin: 6px 0 0; color: #778078; font-size: 11px; }
+.analysis-header .period-picker { flex: 0 0 auto; }
+.analysis-kpi { min-width: 0; }
+.analysis-kpi > strong { overflow-wrap: anywhere; }
+.analysis-kpi.negative { border-color: #f2cfcc; background: #fff7f5; }
+.analysis-kpi.negative > strong { color: #a94f42; }
+.analysis-kpi.positive > strong { color: #357650; }
+.analysis-chart-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .85fr); gap: 14px; align-items: stretch; }
+.analysis-chart-card { min-width: 0; }
+.analysis-card-heading { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.analysis-card-heading h3 { margin: 5px 0 0; color: #303a31; font: 600 16px Georgia, serif; }
+.analysis-card-heading p { margin: 5px 0 0; color: #879187; font-size: 9px; }
+.chart-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding-top: 2px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; color: #6f7b70; font-size: 8px; white-space: nowrap; }
+.chart-legend i { width: 8px; height: 8px; border-radius: 2px; }
+.legend-income { background: #4d8b61; }
+.legend-expense { background: #d38a67; }
+.monthly-chart-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: #cbd7c9 transparent; scrollbar-width: thin; }
+.monthly-chart { display: grid; min-width: 600px; height: 220px; grid-template-columns: repeat(12, minmax(35px, 1fr)); gap: 8px; padding: 17px 4px 0; border-bottom: 1px solid #e5ebe4; }
+.monthly-chart-column { display: grid; min-width: 0; grid-template-rows: minmax(0, 1fr) 16px 24px; justify-items: center; gap: 4px; }
+.monthly-chart-bars { display: flex; width: 100%; height: 100%; align-items: flex-end; justify-content: center; gap: 3px; border-bottom: 1px solid #eef1ec; background: repeating-linear-gradient(to top, transparent 0, transparent 48px, #f0f3ef 49px, transparent 50px); }
+.monthly-chart-bars i { display: block; width: min(34%, 14px); min-height: 0; border-radius: 3px 3px 0 0; transition: height .25s ease; }
+.monthly-bar-income { background: #4d8b61; }
+.monthly-bar-expense { background: #d38a67; }
+.monthly-chart-column > span { color: #778078; font-size: 8px; text-transform: capitalize; }
+.monthly-chart-column > small { max-width: 100%; overflow: hidden; color: #4e7657; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.monthly-chart-column > small.chart-loss { color: #ad5b4c; }
+.analysis-chart-footnote { color: #899188; font-size: 8px; line-height: 1.5; }
+.category-chart { display: grid; gap: 13px; align-content: start; }
+.category-chart-row { display: grid; min-width: 0; gap: 6px; }
+.category-chart-label { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
+.category-chart-label strong { min-width: 0; overflow: hidden; color: #465147; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.category-chart-label span { flex: 0 0 auto; color: #778078; font-size: 8px; }
+.category-chart-track { height: 7px; overflow: hidden; border-radius: 99px; background: #edf1ec; }
+.category-chart-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #568b63, #9ab889); }
+.analysis-fixed-variable { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.analysis-fixed-variable > div { display: grid; gap: 5px; padding: 10px; border-radius: 6px; background: #f4f7f2; }
+.analysis-fixed-variable span, .analysis-summary-grid span { color: #7b857b; font-size: 8px; }
+.analysis-fixed-variable strong { color: #3d483e; font-size: 10px; overflow-wrap: anywhere; }
+.analysis-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.analysis-summary-grid > div { display: grid; min-width: 0; gap: 6px; padding: 12px; border-radius: 6px; background: #f6f8f4; }
+.analysis-summary-grid strong { color: #344438; font: 600 14px Georgia, serif; overflow-wrap: anywhere; }
+.analysis-summary-grid small { color: #7e897f; font-size: 8px; line-height: 1.4; }
+
+@media (max-width: 1120px) {
+  .analysis-chart-grid { grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); }
+  .analysis-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 780px) {
+  .analysis-section { gap: 14px; }
+  .analysis-header { align-items: flex-start; flex-wrap: wrap; }
+  .analysis-header .period-picker { margin-left: auto; }
+  .analysis-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .analysis-kpi { padding: 12px; }
+  .analysis-kpi > strong { font-size: 18px; }
+  .analysis-chart-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .analysis-chart-card { padding: 13px; }
+  .analysis-card-heading h3 { font-size: 15px; }
+  .analysis-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .analysis-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .analysis-header h2 { font-size: 20px; }
+  .analysis-header .period-picker { margin-left: 0; }
+  .analysis-header .period-picker input { width: 100%; }
+  .analysis-kpis { grid-template-columns: minmax(0, 1fr); }
+  .analysis-kpi { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 10px; }
+  .analysis-kpi > span, .analysis-kpi > small { grid-column: 1; }
+  .analysis-kpi > strong { grid-column: 2; grid-row: 1 / span 2; text-align: right; font-size: 17px; }
+  .analysis-card-heading { flex-direction: column; }
+  .chart-legend { justify-content: flex-start; }
+  .analysis-summary-grid { grid-template-columns: minmax(0, 1fr); }
+  .analysis-fixed-variable { grid-template-columns: minmax(0, 1fr); }
+}
